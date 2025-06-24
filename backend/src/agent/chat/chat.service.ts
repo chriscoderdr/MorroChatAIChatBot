@@ -1,7 +1,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AIMessage, AIMessageChunk, HumanMessage } from '@langchain/core/messages';
-import { createLangChainApp } from './lang';
+import { createLangChainApp } from './langchain.factory';
 @Injectable()
 export class ChatService implements OnModuleInit {
   langChainApp: any;
@@ -9,7 +9,10 @@ export class ChatService implements OnModuleInit {
   constructor(private readonly configService: ConfigService) { }
 
   async onModuleInit() {
-    this.langChainApp = await createLangChainApp(this.configService.get<string>('GEMINI_API_KEY') || "");
+    this.langChainApp = await createLangChainApp(
+      this.configService.get<string>('GEMINI_API_KEY') || "",
+      "Dominican Food"
+    );
 
   }
 
@@ -22,8 +25,10 @@ export class ChatService implements OnModuleInit {
       console.log(output)
       console.log("-----\n")
 
-      if (output?.agent?.messages as AIMessageChunk[]) {
+      if (output?.agent?.messages) {
         finalResponseContent += (output.agent.messages[0]  as AIMessageChunk).text;
+      } else if (output?.first_agent?.messages) {
+        finalResponseContent += (output.first_agent.messages[0] as AIMessageChunk).content;
       }
     }
     return finalResponseContent;

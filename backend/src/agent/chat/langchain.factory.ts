@@ -3,12 +3,12 @@ import { z } from "zod";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
-import { AIMessage, AIMessageChunk, BaseMessage } from "@langchain/core/messages";
+import { AIMessage, AIMessageChunk, BaseMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { RunnableConfig } from "@langchain/core/runnables";
 import { concat } from "@langchain/core/utils/stream";
 import { TavilySearch } from "@langchain/tavily";
 
-export const createLangChainApp = async (modelApiKey: string) => {
+export const createLangChainApp = async (modelApiKey: string, topic?: string) => {
     const model = new ChatGoogleGenerativeAI({
         apiKey: modelApiKey,
         model: 'gemini-1.5-flash',
@@ -76,22 +76,48 @@ export const createLangChainApp = async (modelApiKey: string) => {
     };
 
     const firstModel = async (state: typeof AgentState.State) => {
-        const humanInput = state.messages[state.messages.length - 1].content || "";
+        // Extract content from the last message (which is expected to be a HumanMessage from user input)
+        const lastHumanMessageContent = state.messages[state.messages.length - 1].content;
+        let humanInputString: string = "";
+
+        if (typeof lastHumanMessageContent === 'string') {
+            humanInputString = lastHumanMessageContent;
+        } else if (Array.isArray(lastHumanMessageContent)) {
+            // If content is an array, concatenate text parts.
+            humanInputString = lastHumanMessageContent
+                .map(part => {
+                    if (typeof part === 'object' && 'text' in part) {
+                        return part.text;
+                    }
+                    return '';
+                })
+                .join('');
+        }
+
+        let messagesForModel: BaseMessage[] = [];
+
+        if (topic) {
+            const systemPrompt = new SystemMessage(
+                `You are an expert in ${topic}. Your primary goal is to answer questions related to ${topic}. ` +
+                `If a question is clearly outside the domain of ${topic}, you must politely decline to answer or redirect the user back to your area of expertise. ` +
+                `Do not answer questions that are off-topic. Only use the 'search' tool for information directly related to ${topic}.`
+            );
+            messagesForModel.push(systemPrompt);
+        }
+
+        messagesForModel.push(new HumanMessage(humanInputString));
+
+        let response: AIMessageChunk | undefined;
+        for await (const message of await boundModel.stream(messagesForModel)) {
+            if (!response) {
+                response = message;
+            } else {
+                response = concat(response, message);
+            }
+        }
+
         return {
-            messages: [
-                new AIMessage({
-                    content: "",
-                    tool_calls: [
-                        {
-                            name: "search",
-                            args: {
-                                query: humanInput,
-                            },
-                            id: "tool_abcd123",
-                        },
-                    ],
-                }),
-            ],
+            messages: response ? [response as AIMessage] : [],
         };
     };
 
@@ -101,6 +127,14 @@ export const createLangChainApp = async (modelApiKey: string) => {
         .addNode("action", toolNode)
         .addEdge(START, "first_agent")
         .addConditionalEdges(
+            "first_agent",
+            shouldContinue,
+            {
+                continue: "action",
+                end: END,
+            },
+        )
+        .addConditionalEdges(
             "agent",
             shouldContinue,
             {
@@ -108,10 +142,8 @@ export const createLangChainApp = async (modelApiKey: string) => {
                 end: END,
             },
         )
-        .addEdge("action", "agent")
-        .addEdge("first_agent", "action");
+        .addEdge("action", "agent");
 
     const app = workflow.compile();
     return app;
 }
-
