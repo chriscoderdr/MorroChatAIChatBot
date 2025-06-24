@@ -10,10 +10,13 @@ import { useChatMutation } from './hooks/useChatMutation';
 interface IMessage {
   text: string;
   isUser: boolean;
+  isError?: boolean;
+  messageId?: string; // To track messages for retries
 }
 
 function App() {
   const [messages, setMessages] = useState<IMessage[]>([]);
+  const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null);
   const chatMutation = useChatMutation();
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
@@ -23,16 +26,51 @@ function App() {
     }
   }, [messages, chatMutation.isPending]);
 
+  const handleRetry = () => {
+    // If we have a last failed message, retry it
+    if (lastFailedMessage) {
+      handleSendMessage(lastFailedMessage, true);
+    }
+  };
 
-  const handleSendMessage = (message: string) => {
-    setMessages(prevMessages => [...prevMessages, { text: message, isUser: true }]);
+  const handleSendMessage = (message: string, isRetry = false) => {
+    // If it's a retry, remove the error message first
+    if (isRetry) {
+      setMessages(prevMessages => prevMessages.filter(msg => !msg.isError));
+    }
+    
+    // Add user message to the chat
+    const messageId = Date.now().toString();
+    setMessages(prevMessages => [...prevMessages, { 
+      text: message, 
+      isUser: true,
+      messageId
+    }]);
 
+    // Save the message in case we need to retry
+    setLastFailedMessage(message);
+
+    // Send the message to the API
     chatMutation.mutate({ message }, {
       onSuccess: (data) => {
-        setMessages(prevMessages => [...prevMessages, { text: data.reply, isUser: false }]);
+        // On success, clear the last failed message
+        setLastFailedMessage(null);
+        
+        // Add the response to the chat
+        setMessages(prevMessages => [...prevMessages, { 
+          text: data.reply, 
+          isUser: false,
+          messageId: `response-${messageId}`
+        }]);
       },
       onError: (error) => {
-        setMessages(prevMessages => [...prevMessages, { text: `Error: ${error.message}`, isUser: false }]);
+        // On error, add an error message to the chat
+        setMessages(prevMessages => [...prevMessages, { 
+          text: `Error: ${error.message}`, 
+          isUser: false, 
+          isError: true,
+          messageId: `error-${messageId}`
+        }]);
       }
     });
   };
@@ -49,10 +87,14 @@ function App() {
             ) : (
               <div className="space-y-6">
                 {messages.map((msg, index) => (
-                  <ChatMessage key={index} message={msg} />
+                  <ChatMessage 
+                    key={msg.messageId || index} 
+                    message={msg} 
+                    onRetry={msg.isError ? handleRetry : undefined}
+                  />
                 ))}
-                 {chatMutation.isPending && (
-                    <ChatMessage message={{ text: '', isUser: false }} />
+                {chatMutation.isPending && (
+                  <ChatMessage message={{ text: '', isUser: false }} />
                 )}
               </div>
             )}
