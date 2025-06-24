@@ -23,6 +23,8 @@ export class LangChainService {
       apiKey,
       model: this.configService.get<string>('openai.model') || 'gemini-1.5-flash',
       temperature: this.configService.get<number>('openai.temperature') || 0,
+      // Set a higher token limit to accommodate conversation history
+      maxOutputTokens: 1024,
     });
 
     const searchTool = new DynamicStructuredTool({
@@ -88,32 +90,44 @@ export class LangChainService {
     const firstModel = async (state: typeof AgentState.State) => {
       // Extract content from the last message (which is expected to be a HumanMessage from user input)
       const lastHumanMessageContent = state.messages[state.messages.length - 1].content;
-      let humanInputString: string = "";
+      let humanInputString: string = "";        if (typeof lastHumanMessageContent === 'string') {
+            humanInputString = lastHumanMessageContent;
+        } else if (Array.isArray(lastHumanMessageContent)) {
+            // If content is an array, concatenate text parts.
+            humanInputString = lastHumanMessageContent
+                .map(part => {
+                    if (typeof part === 'object' && 'text' in part) {
+                        return part.text;
+                    }
+                    return '';
+                })
+                .join('');
+        }
 
-      if (typeof lastHumanMessageContent === 'string') {
-        humanInputString = lastHumanMessageContent;
-      } else if (Array.isArray(lastHumanMessageContent)) {
-        // If content is an array, concatenate text parts.
-        humanInputString = lastHumanMessageContent
-          .map(part => {
-            if (typeof part === 'object' && 'text' in part) {
-              return part.text;
+        // Check if we have a conversation history
+        const conversationHistory = state.messages.length > 1 
+            ? state.messages.slice(0, -1) // All messages except the latest user message
+            : [];
+        
+        let messagesForModel: BaseMessage[] = [...conversationHistory]; // Start with conversation history
+
+        // Add system message at the beginning for consistent context
+        if (topic) {
+            const systemPrompt = new SystemMessage(
+                `You are an expert in ${topic}. Your primary goal is to answer questions related to ${topic}. ` +
+                `If a question is clearly outside the domain of ${topic}, you must politely decline to answer or redirect the user back to your area of expertise. ` +
+                `Do not answer questions that are off-topic. Only use the 'search' tool for information directly related to ${topic}. ` +
+                `Maintain context from the conversation history when responding.`
+            );
+            
+            // Insert system message at the beginning if we have a history,
+            // or just add it as the first message if we don't
+            if (messagesForModel.length > 0) {
+                messagesForModel.unshift(systemPrompt);
+            } else {
+                messagesForModel.push(systemPrompt);
             }
-            return '';
-          })
-          .join('');
-      }
-
-      let messagesForModel: BaseMessage[] = [];
-
-      if (topic) {
-        const systemPrompt = new SystemMessage(
-          `You are an expert in ${topic}. Your primary goal is to answer questions related to ${topic}. ` +
-          `If a question is clearly outside the domain of ${topic}, you must politely decline to answer or redirect the user back to your area of expertise. ` +
-          `Do not answer questions that are off-topic. Only use the 'search' tool for information directly related to ${topic}.`
-        );
-        messagesForModel.push(systemPrompt);
-      }
+        }
 
       messagesForModel.push(new HumanMessage(humanInputString));
 

@@ -59,8 +59,25 @@ export class ChatService {
       // Initialize LangChain with session topic
       const langChainApp = await this.langChainService.createLangChainApp(session.topic);
       
+      // Convert history messages to LangChain format
+      const historyMessages: Array<HumanMessage | AIMessage> = [];
+      
+      // Add previous messages as context (limit to last 10 messages to avoid token limits)
+      const recentMessages = session.messages.slice(-10);
+      for (const msg of recentMessages) {
+        if (msg.role === 'user') {
+          historyMessages.push(new HumanMessage(msg.message));
+        } else if (msg.role === 'ai') {
+          historyMessages.push(new AIMessage(msg.message));
+        }
+        // Skip 'system' messages as they're handled by the LangChain setup
+      }
+      
+      // Add the current user message
+      historyMessages.push(new HumanMessage(userMessage));
+      
       const inputs = {
-        messages: [new HumanMessage(userMessage)]
+        messages: historyMessages
       };
 
       let finalResponseContent: string = "";
