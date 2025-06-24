@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
-import { ChatService } from './chat.service';
+import { ChatService } from '../service/chat.service';
 import { ChatResponseDto } from 'src/dtos/chatResponseDto';
 import { seconds, Throttle } from '@nestjs/throttler';
 

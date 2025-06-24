@@ -1,7 +1,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AIMessage, AIMessageChunk, HumanMessage } from '@langchain/core/messages';
-import { createLangChainApp } from './langchain.factory';
+import { createLangChainApp } from '../langchain.factory';
 @Injectable()
 export class ChatService implements OnModuleInit {
   langChainApp: any;
