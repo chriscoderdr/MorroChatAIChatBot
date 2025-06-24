@@ -1,0 +1,3 @@
+interface ChatRequestDto {
+    message: string;
+}
