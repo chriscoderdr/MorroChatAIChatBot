@@ -9,8 +9,8 @@ export class ChatController {
 
     @Throttle({
         default: {
-            ttl: seconds(60), // 1 minute
-            limit: 1 // 10 requests per minute
+            ttl: seconds(60),
+            limit: 20
         }
     })
     @Post("")
@@ -18,7 +18,9 @@ export class ChatController {
         const { message } = chatRequestDto;
 
         return {
-            reply: await this.chatService.invoke(message)
+            reply: await this.chatService.invoke(message,
+                "111"
+            )
         };
     }
 }
