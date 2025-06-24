@@ -41,6 +41,8 @@ async function bootstrap() {
     origin: true, // Allow all origins for development
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true, // Allow cookies or authorization headers
+    exposedHeaders: ['set-cookie'],
+    allowedHeaders: 'Origin,X-Requested-With,Content-Type,Accept,Authorization',
   });
 
   // Use cookie parser

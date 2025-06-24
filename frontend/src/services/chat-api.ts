@@ -13,6 +13,7 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true, // This enables sending cookies with cross-origin requests
 });
 
 export const sendMessage = async (payload: SendMessagePayload): Promise<ChatResponse> => {
