@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ChatModule } from './chat/chat.module';
@@ -6,6 +6,7 @@ import { seconds, ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AppConfigModule } from './config/config.module';
+import { BrowserSessionMiddleware } from './common/middlewares/browser-session.middleware';
 
 @Module({
   imports: [
@@ -34,4 +35,10 @@ import { AppConfigModule } from './config/config.module';
     AppService
   ],
 })
-export class AppModule { }
+export class AppModule implements NestModule { 
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(BrowserSessionMiddleware)
+      .forRoutes('*'); // Apply to all routes
+  }
+}

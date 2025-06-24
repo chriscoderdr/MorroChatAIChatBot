@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import * as cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -35,8 +36,14 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
   
-  // Enable CORS for frontend communication
-  app.enableCors();
+  // Enable CORS for frontend communication with credentials
+  app.enableCors({
+    origin: true, // Allow all origins or specify your frontend URL
+    credentials: true, // Allow cookies to be sent/received
+  });
+  
+  // Use cookie parser
+  app.use(cookieParser());
   
   await app.listen(port);
   logger.log(`Application running on port ${port}`);

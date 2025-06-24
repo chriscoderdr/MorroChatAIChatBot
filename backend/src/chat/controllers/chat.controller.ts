@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { ChatService } from '../services/chat.service';
 import { ChatRequestDto } from '../dto/chat-request.dto';
 import { ChatResponseDto } from '../dto/chat-response.dto';
 import { seconds, Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam } from '@nestjs/swagger';
+import { Request } from 'express';
 
 @ApiTags('chat')
 @Controller('chat')
@@ -21,13 +22,13 @@ export class ChatController {
   })
   @Post()
   async chatWithoutSession(
+    @Req() req: Request,
     @Body() chatRequestDto: ChatRequestDto,
   ): Promise<ChatResponseDto> {
-    // In a real app, you would get the userId from the authentication context
-    const userId = '111';
-    
     const { message } = chatRequestDto;
-    const reply = await this.chatService.invoke(message, null, userId);
+    // Use the browser's session ID as the user ID
+    const browserSessionId = req.browserSessionId || 'anonymous';
+    const reply = await this.chatService.invoke(message, null, browserSessionId);
     
     return { reply };
   }
@@ -44,14 +45,14 @@ export class ChatController {
   })
   @Post(':sessionId')
   async chatWithSession(
+    @Req() req: Request,
     @Body() chatRequestDto: ChatRequestDto,
     @Param('sessionId') sessionId: string,
   ): Promise<ChatResponseDto> {
-    // In a real app, you would get the userId from the authentication context
-    const userId = '111';
-    
     const { message } = chatRequestDto;
-    const reply = await this.chatService.invoke(message, sessionId, userId);
+    // Use the browser's session ID as the user ID
+    const browserSessionId = req.browserSessionId || 'anonymous';
+    const reply = await this.chatService.invoke(message, sessionId, browserSessionId);
     
     return { reply };
   }
@@ -61,10 +62,12 @@ export class ChatController {
     properties: { sessionId: { type: 'string' } } 
   }})
   @Post('sessions')
-  async createSession(): Promise<{ sessionId: string }> {
-    // In a real app, you would get the userId from the authentication context
-    const userId = '111';
-    const sessionId = await this.chatService.createSession(userId);
+  async createSession(
+    @Req() req: Request
+  ): Promise<{ sessionId: string }> {
+    // Use the browser's session ID as the user ID
+    const browserSessionId = req.browserSessionId || 'anonymous';
+    const sessionId = await this.chatService.createSession(browserSessionId);
     return { sessionId };
   }
 
