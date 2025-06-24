@@ -14,8 +14,8 @@ import { BrowserSessionMiddleware } from './common/middlewares/browser-session.m
     ThrottlerModule.forRoot({
       throttlers: [
         {
-          ttl: seconds(60),
-          limit: 10,
+          ttl: seconds(30),
+          limit: 100,
         }
       ]
     }),

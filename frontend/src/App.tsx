@@ -4,8 +4,10 @@ import { Sidebar } from './components/layout/side-bar';
 import { ChatMessage } from './components/chat/chat-message';
 import { ChatInput } from './components/chat/chat-input';
 import { EmptyState } from './components/chat/empty-state';
+import { ChatHistoryError } from './components/chat/chat-history-error';
 import { useChatMutation } from './hooks/useChatMutation';
-
+import { useChatHistory } from './hooks/useChatHistory';
+import type { ChatMessage as ChatMessageModel } from './models/chatMessage';
 
 interface IMessage {
   text: string;
@@ -18,7 +20,21 @@ function App() {
   const [messages, setMessages] = useState<IMessage[]>([]);
   const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null);
   const chatMutation = useChatMutation();
+  const chatHistoryQuery = useChatHistory();
   const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  // Load chat history when component mounts
+  useEffect(() => {
+    if (chatHistoryQuery.data?.messages && chatHistoryQuery.data.hasMessages) {
+      // Convert the server message format to our local format
+      const historyMessages = chatHistoryQuery.data.messages.map(msg => ({
+        text: msg.message,
+        isUser: msg.role === 'user',
+        messageId: msg._id
+      }));
+      setMessages(historyMessages);
+    }
+  }, [chatHistoryQuery.data]);
 
   useEffect(() => {
     if (chatContainerRef.current) {
@@ -83,7 +99,18 @@ function App() {
         <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-6">
           <div className="max-w-4xl mx-auto">
             {messages.length === 0 ? (
-              <EmptyState onSuggestionClick={handleSendMessage} />
+              chatHistoryQuery.isLoading ? (
+                <div className="flex justify-center items-center h-64">
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+                </div>
+              ) : chatHistoryQuery.isError ? (
+                <ChatHistoryError 
+                  error={chatHistoryQuery.error} 
+                  onRetry={() => chatHistoryQuery.refetch()} 
+                />
+              ) : (
+                <EmptyState onSuggestionClick={handleSendMessage} />
+              )
             ) : (
               <div className="space-y-6">
                 {messages.map((msg, index) => (

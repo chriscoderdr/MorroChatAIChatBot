@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { ChatHistory } from '../models/chatMessage';
 
 export interface SendMessagePayload {
   message: string;
@@ -31,5 +32,19 @@ export const sendMessage = async (payload: SendMessagePayload): Promise<ChatResp
     // Handle generic errors
     console.error('An unexpected error occurred:', error);
     throw new Error('An unexpected error occurred.');
+  }
+};
+
+export const fetchChatHistory = async (): Promise<ChatHistory> => {
+  try {
+    const response = await apiClient.get<ChatHistory>('/history');
+    return response.data;
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      console.error('Error fetching chat history:', error.response?.data || error.message);
+      throw new Error(error.response?.data?.message || 'Failed to fetch chat history from the server.');
+    }
+    console.error('An unexpected error occurred:', error);
+    throw new Error('An unexpected error occurred while fetching chat history.');
   }
 };

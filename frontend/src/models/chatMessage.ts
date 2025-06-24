@@ -1,4 +1,12 @@
 export interface ChatMessage {
-    text: string;
-    isUser: () => boolean;
+    message: string;
+    role: 'user' | 'ai';
+    timestamp: string;
+    _id: string;
+}
+
+export interface ChatHistory {
+    sessionId: string;
+    messages: ChatMessage[];
+    hasMessages: boolean;
 }
