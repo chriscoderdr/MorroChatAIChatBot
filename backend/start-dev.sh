@@ -21,6 +21,16 @@ if [ ! -d "node_modules" ]; then
     npm install
 fi
 
+# Make sure required packages are installed
+echo "Checking for required packages..."
+required_packages=("zod" "uuid" "class-validator" "class-transformer" "@nestjs/swagger")
+for pkg in "${required_packages[@]}"; do
+    if ! grep -q "\"$pkg\":" node_modules/package.json 2>/dev/null; then
+        echo "Installing missing package: $pkg"
+        npm install --save $pkg
+    fi
+done
+
 # Check if MongoDB URI is set to a local connection and if MongoDB is running
 MONGO_URI=$(grep "MONGO_URI=" .env | cut -d= -f2)
 if [[ $MONGO_URI == *"mongodb://localhost"* || $MONGO_URI == *"mongodb://127.0.0.1"* ]]; then

@@ -6,11 +6,11 @@ import { seconds, Throttle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam } from '@nestjs/swagger';
 
 @ApiTags('chat')
-@Controller('api/v1/chat')
+@Controller('chat')
 export class ChatController {
   constructor(private readonly chatService: ChatService) {}
 
-  @ApiOperation({ summary: 'Process a chat request' })
+  @ApiOperation({ summary: 'Process a chat request without session' })
   @ApiResponse({ status: 201, description: 'Chat processed successfully', type: ChatResponseDto })
   @ApiBody({ type: ChatRequestDto, description: 'Chat request with user message' })
   @Throttle({
@@ -19,17 +19,39 @@ export class ChatController {
       limit: 20
     }
   })
-  @Post(':sessionId?')
-  async chat(
+  @Post()
+  async chatWithoutSession(
     @Body() chatRequestDto: ChatRequestDto,
-    @Param('sessionId') sessionId?: string,
   ): Promise<ChatResponseDto> {
     // In a real app, you would get the userId from the authentication context
-    // For now, we'll use a placeholder userId
     const userId = '111';
     
     const { message } = chatRequestDto;
-    const reply = await this.chatService.invoke(message, sessionId || null, userId);
+    const reply = await this.chatService.invoke(message, null, userId);
+    
+    return { reply };
+  }
+
+  @ApiOperation({ summary: 'Process a chat request with session' })
+  @ApiResponse({ status: 201, description: 'Chat processed successfully', type: ChatResponseDto })
+  @ApiBody({ type: ChatRequestDto, description: 'Chat request with user message' })
+  @ApiParam({ name: 'sessionId', description: 'The ID of the chat session' })
+  @Throttle({
+    default: {
+      ttl: seconds(60),
+      limit: 20
+    }
+  })
+  @Post(':sessionId')
+  async chatWithSession(
+    @Body() chatRequestDto: ChatRequestDto,
+    @Param('sessionId') sessionId: string,
+  ): Promise<ChatResponseDto> {
+    // In a real app, you would get the userId from the authentication context
+    const userId = '111';
+    
+    const { message } = chatRequestDto;
+    const reply = await this.chatService.invoke(message, sessionId, userId);
     
     return { reply };
   }
