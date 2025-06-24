@@ -22,6 +22,20 @@ import { BrowserSessionMiddleware } from './common/middlewares/browser-session.m
     MongooseModule.forRootAsync({
       useFactory: () => ({
         uri: process.env.MONGO_URI || 'mongodb://localhost:27017/morro_chat',
+        // Connection pool settings
+        connectionFactory: (connection) => {
+          connection.on('connected', () => {
+            console.log('MongoDB connection established successfully');
+          });
+          return connection;
+        },
+        // Modern MongoDB connection options (compatible with newer MongoDB drivers)
+        maxPoolSize: 10,
+        minPoolSize: 2,
+        socketTimeoutMS: 45000,
+        connectTimeoutMS: 10000,
+        // Enable in-memory caching
+        bufferCommands: false,
       }),
     }),
     ChatModule

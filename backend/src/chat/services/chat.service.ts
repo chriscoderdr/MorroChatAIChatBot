@@ -43,18 +43,21 @@ export class ChatService {
       // Get or create session
       const validSessionId = await this.getOrCreateSession(sessionId, userId);
       
-      // Save user message to session history
-      await this.chatSessionRepository.addMessage(validSessionId, {
+      // Create user message with proper typing
+      const userMessageObj: ChatMessage = {
         message: userMessage,
         role: 'user',
         timestamp: new Date(),
-      });
-
-      // Get session data
+      };
+      
+      // Get session data - this will use cache if available
       const session = await this.chatSessionRepository.findBySessionId(validSessionId);
       if (!session) {
         throw new NotFoundException(`Session with id ${validSessionId} not found`);
       }
+      
+      // Add message to session - this updates the cache immediately
+      await this.chatSessionRepository.addMessage(validSessionId, userMessageObj);
 
       // Initialize LangChain with session topic
       const langChainApp = await this.langChainService.createLangChainApp(session.topic);
@@ -91,12 +94,15 @@ export class ChatService {
         }
       }
 
-      // Save AI response to session history
-      await this.chatSessionRepository.addMessage(validSessionId, {
+      // Create AI response with proper typing
+      const aiMessageObj: ChatMessage = {
         message: finalResponseContent,
         role: 'ai',
         timestamp: new Date(),
-      });
+      };
+      
+      // Save AI response to session history (this uses caching)
+      await this.chatSessionRepository.addMessage(validSessionId, aiMessageObj);
 
       return finalResponseContent;
     } catch (error) {

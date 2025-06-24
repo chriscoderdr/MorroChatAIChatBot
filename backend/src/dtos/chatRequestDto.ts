@@ -1,3 +1,3 @@
-interface ChatRequestDto {
+export interface ChatRequestDto {
     message: string;
 }
