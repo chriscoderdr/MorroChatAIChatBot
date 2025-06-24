@@ -112,7 +112,6 @@ export const createLangChainApp = async (modelApiKey: string) => {
         .addEdge("first_agent", "action");
 
     const app = workflow.compile();
-    
     return app;
 }
 
