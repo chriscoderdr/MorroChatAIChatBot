@@ -1,4 +1,3 @@
-import React from 'react';
 import { Header } from './components/layout/header';
 import { Sidebar } from './components/layout/side-bar';
 import { ChatMessage } from './components/chat/chat-message';
@@ -6,7 +5,7 @@ import { ChatInput } from './components/chat/chat-input';
 import { EmptyState } from './components/chat/empty-state';
 // To demonstrate a conversation, we'll use a boolean flag.
 // In a real app, this would be based on your chat history state.
-const hasMessages = true; 
+const hasMessages = false; 
 
 const mockMessages = [
   { text: "Hello! Tell me about El Morro de Montecristi.", isUser: true },
