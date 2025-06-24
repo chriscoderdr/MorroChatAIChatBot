@@ -2,15 +2,14 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ChatModule } from './chat/chat.module';
-import { ConfigModule } from '@nestjs/config';
 import { seconds, ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+import { MongooseModule } from '@nestjs/mongoose';
+import { AppConfigModule } from './config/config.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-      envFilePath: '.env',
-    }),
+    AppConfigModule,
     ThrottlerModule.forRoot({
       throttlers: [
         {
@@ -19,11 +18,17 @@ import { seconds, ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
         }
       ]
     }),
-    ChatModule],
+    MongooseModule.forRootAsync({
+      useFactory: () => ({
+        uri: process.env.MONGO_URI || 'mongodb://localhost:27017/morro_chat',
+      }),
+    }),
+    ChatModule
+  ],
   controllers: [AppController],
   providers: [
     {
-      provide: 'APP_GUARD',
+      provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
     AppService
