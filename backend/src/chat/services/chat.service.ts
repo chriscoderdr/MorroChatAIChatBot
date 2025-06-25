@@ -17,54 +17,81 @@ export class ChatService {
     private readonly configService: ConfigService,
   ) {
     this.defaultTopic = this.configService.get<string>('CHAT_DEFAULT_TOPIC') || undefined;
+    
+    // Set up periodic debug logging
+    setInterval(() => this.logSessionStats(), 5 * 60 * 1000); // Every 5 minutes
+  }
+  
+  /**
+   * Log session statistics for debugging
+   */
+  private async logSessionStats(): Promise<void> {
+    try {
+      // This method helps ensure sessions are being persisted correctly
+      const totalSessions = await this.chatSessionRepository.countSessions();
+      this.logger.log(`Current session stats: ${totalSessions} total sessions in database`);
+    } catch (error) {
+      this.logger.error(`Error logging session stats: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Force persistence of any pending session data to the database
+   * This can be called by maintenance endpoints or scheduled tasks
+   */
+  async forcePersistSessions(): Promise<{ success: boolean; message: string }> {
+    try {
+      await this.chatSessionRepository.flushAllPendingMessages();
+      return { success: true, message: 'All pending session data has been persisted to the database' };
+    } catch (error) {
+      this.logger.error(`Error persisting sessions: ${error.message}`, error.stack);
+      return { success: false, message: `Error persisting sessions: ${error.message}` };
+    }
   }
 
+
+  // Always use userId as sessionId
   async createSession(userId: string): Promise<string> {
-    const sessionId = uuidv4();
-    await this.chatSessionRepository.createSession(sessionId, userId, this.defaultTopic);
-    return sessionId;
+    await this.chatSessionRepository.createSession(userId, this.defaultTopic);
+    return userId;
   }
 
   async getOrCreateSession(sessionId: string | null, userId: string): Promise<string> {
-    if (!sessionId) {
-      return this.createSession(userId);
-    }
-    
-    const session = await this.chatSessionRepository.findBySessionId(sessionId);
+    // Always use userId as sessionId
+    const session = await this.chatSessionRepository.findByUserId(userId);
     if (!session) {
-      return this.createSession(userId);
+      await this.createSession(userId);
     }
-    
-    return sessionId;
+    return userId;
   }
 
   async invoke(userMessage: string, sessionId: string, userId: string): Promise<string> {
     try {
-      // The sessionId passed here is already validated (from getOrCreateSession)
-      const validSessionId = sessionId;
-      
+      // Always use userId as sessionId
+      const validSessionId = userId;
+
       // Create user message with proper typing
       const userMessageObj: ChatMessage = {
         message: userMessage,
         role: 'user',
         timestamp: new Date(),
       };
-      
+
       // Get session data - this will use cache if available
-      const session = await this.chatSessionRepository.findBySessionId(validSessionId);
+      const session = await this.chatSessionRepository.findByUserId(validSessionId);
       if (!session) {
         throw new NotFoundException(`Session with id ${validSessionId} not found`);
       }
-      
+
       // Add message to session - this updates the cache immediately
       await this.chatSessionRepository.addMessage(validSessionId, userMessageObj);
 
       // Initialize LangChain with session topic
       const langChainApp = await this.langChainService.createLangChainApp(session.topic);
-      
+
       // Convert history messages to LangChain format
       const historyMessages: Array<HumanMessage | AIMessage> = [];
-      
+
       // Add previous messages as context (limit to last 10 messages to avoid token limits)
       const recentMessages = session.messages.slice(-10);
       for (const msg of recentMessages) {
@@ -75,10 +102,10 @@ export class ChatService {
         }
         // Skip 'system' messages as they're handled by the LangChain setup
       }
-      
+
       // Add the current user message
       historyMessages.push(new HumanMessage(userMessage));
-      
+
       const inputs = {
         messages: historyMessages
       };
@@ -100,7 +127,7 @@ export class ChatService {
         role: 'ai',
         timestamp: new Date(),
       };
-      
+
       // Save AI response to session history (this uses caching)
       await this.chatSessionRepository.addMessage(validSessionId, aiMessageObj);
       console.log(`AI response saved to session ${validSessionId}`);

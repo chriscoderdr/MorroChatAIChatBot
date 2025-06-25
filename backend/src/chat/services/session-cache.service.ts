@@ -100,4 +100,21 @@ export class SessionCacheService {
     
     return sessions;
   }
+  
+  /**
+   * Get all session IDs from the cache
+   */
+  getAllSessionIds(): string[] {
+    const now = Date.now();
+    const sessionIds: string[] = [];
+    
+    for (const [sessionId, entry] of this.cache.entries()) {
+      // Only include non-expired sessions
+      if (now - entry.timestamp <= this.TTL) {
+        sessionIds.push(sessionId);
+      }
+    }
+    
+    return sessionIds;
+  }
 }

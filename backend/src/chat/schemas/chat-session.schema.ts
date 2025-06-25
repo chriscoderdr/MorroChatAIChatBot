@@ -4,11 +4,8 @@ import { ChatMessage } from '../interfaces/chat-session.interface';
 
 @Schema({ timestamps: true })
 export class ChatSession extends Document {
-  @Prop({ required: true, index: true })
-  sessionId: string;
-
-  @Prop({ required: true, index: true })
-  userId: string;
+  @Prop({ required: true, unique: true, index: true })
+  userId: string; // This is the browserSessionId and the unique identifier
 
   @Prop()
   topic?: string;
@@ -19,7 +16,7 @@ export class ChatSession extends Document {
     timestamp: { type: Date, default: Date.now }
   }])
   messages: ChatMessage[];
-  
+
   // Explicitly define timestamp fields that Mongoose adds
   @Prop({ type: Date })
   createdAt: Date;

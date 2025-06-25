@@ -7,21 +7,23 @@ export class BrowserSessionMiddleware implements NestMiddleware {
   private readonly logger = new Logger(BrowserSessionMiddleware.name);
   
   use(req: Request, res: Response, next: NextFunction) {
-    this.logger.debug(`Processing request for path: ${req.path}`);
+    this.logger.log(`Processing request for path: ${req.path}`);
+    this.logger.log(`Request cookies: ${JSON.stringify(req.cookies)}`);
     
     // Check if the user already has a browser session ID
     if (!req.cookies?.browserSessionId) {
       // Generate a new session ID
       const browserSessionId = uuidv4();
       
-      this.logger.debug(`Creating new browser session: ${browserSessionId}`);
+      this.logger.log(`Creating new browser session: ${browserSessionId}`);
       
-      // Set a cookie that expires in 1 year (or adjust as needed)
+      // Set a cookie that expires in 1 year with path set to root
       res.cookie('browserSessionId', browserSessionId, {
         maxAge: 365 * 24 * 60 * 60 * 1000, // 1 year
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production', // secure in production
         sameSite: 'lax',
+        path: '/', // Ensure cookie is available for all paths
       });
       
       // Also make it available in the request object for this request
@@ -29,7 +31,7 @@ export class BrowserSessionMiddleware implements NestMiddleware {
     } else {
       // Use the existing session ID
       req.browserSessionId = req.cookies.browserSessionId;
-      this.logger.debug(`Using existing browser session: ${req.browserSessionId}`);
+      this.logger.log(`Using existing browser session: ${req.browserSessionId}`);
     }
     
     next();

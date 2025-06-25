@@ -7,8 +7,7 @@ export interface ChatMessage {
 }
 
 export interface ChatSession extends Document {
-  sessionId: string;
-  userId: string;
+  userId: string; // This is the browserSessionId and the unique identifier
   topic?: string;
   messages: ChatMessage[];
   // Mongoose timestamp fields (added by { timestamps: true })

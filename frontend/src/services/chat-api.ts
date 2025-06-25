@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ChatHistory } from '../models/chatMessage';
+import type { ChatHistory, ChatMessage } from '../models/chatMessage';
 
 export interface SendMessagePayload {
   message: string;
@@ -37,8 +37,16 @@ export const sendMessage = async (payload: SendMessagePayload): Promise<ChatResp
 
 export const fetchChatHistory = async (): Promise<ChatHistory> => {
   try {
-    const response = await apiClient.get<ChatHistory>('/chat/history');
-    return response.data;
+    const response = await apiClient.get<ChatMessage[]>('/chat/history');
+    
+    // Convert the array of messages into the ChatHistory format
+    const chatHistory: ChatHistory = {
+      sessionId: 'current-session', // You can use a default or get this from elsewhere if needed
+      messages: response.data,
+      hasMessages: response.data.length > 0
+    };
+    
+    return chatHistory;
   } catch (error) {
     if (axios.isAxiosError(error)) {
       console.error('Error fetching chat history:', error.response?.data || error.message);

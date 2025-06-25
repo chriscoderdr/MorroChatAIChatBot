@@ -45,8 +45,8 @@ async function bootstrap() {
     allowedHeaders: 'Origin,X-Requested-With,Content-Type,Accept,Authorization',
   });
 
-  // Use cookie parser
-  app.use(cookieParser());
+  // Use cookie parser with a secret for signed cookies
+  app.use(cookieParser(process.env.COOKIE_SECRET || 'morro-chat-cookie-secret'));
 
   await app.listen(port);
   logger.log(`Application running on port ${port}`);
