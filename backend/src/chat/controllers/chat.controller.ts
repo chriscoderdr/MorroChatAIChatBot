@@ -1,3 +1,5 @@
+// chat.controller.ts (Corrected)
+
 import { Body, Controller, Get, NotFoundException, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { ChatService } from '../services/chat.service';
 import { ChatRequestDto } from '../dto/chat-request.dto';
@@ -33,21 +35,13 @@ export class ChatController {
     @Body() chatRequestDto: ChatRequestDto,
   ): Promise<ChatResponseDto> {
     const { message } = chatRequestDto;
-
-    // Log cookie information for debugging
-    console.log(`Chat request cookies: ${JSON.stringify(req.cookies)}`);
-
-    // Use the browser's session ID from middleware
     const browserSessionId = req.browserSessionId || 'anonymous';
-    console.log(`Using browserSessionId: ${browserSessionId}`);
-
-    // Use browserSessionId for everything - no need for a separate chatSessionId
-    const result = await this.chatService.processChat(message, null, browserSessionId);
-
+    
+    // We pass the userId (browserSessionId) directly to processChat.
+    const result = await this.chatService.processChat(message, browserSessionId);
 
     return {
       reply: result.reply,
-      // We no longer need to send the sessionId back to the frontend
     };
   }
 
@@ -58,12 +52,10 @@ export class ChatController {
   async getSessionHistory(
     @Req() req: Request,
   ) {
-    // Get the session ID from the cookie
-    const browserSessionId = req.browserSessionId || 'anonymous';
+    const browserSessionId = req.browserSessionId;
 
     if (!browserSessionId) {
-      // No session, create one and return empty array
-      await this.chatService.createSession(browserSessionId);
+      // If there's no session ID, there can be no history.
       return [];
     }
 
