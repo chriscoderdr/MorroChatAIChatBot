@@ -1,10 +1,10 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { AIMessage, AIMessageChunk, HumanMessage } from '@langchain/core/messages';
+import { AIMessage, AIMessageChunk, HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { ChatMessage } from '../interfaces/chat-session.interface';
 import { LangChainService } from './langchain.service';
-import { v4 as uuidv4 } from 'uuid';
 import { ChatSessionRepository } from '../repositories/chat-session.repository';
 import { ConfigService } from '@nestjs/config';
+import * as franc from 'franc';
 
 @Injectable()
 export class ChatService {
@@ -70,6 +70,25 @@ export class ChatService {
       // Always use userId as sessionId
       const validSessionId = userId;
 
+      // Detect language of the user message
+      const langCode = franc.franc(userMessage, { minLength: 3 });
+      // Map ISO 639-3 code to language name (fallback to English)
+      const langMap: Record<string, string> = {
+        eng: 'English',
+        spa: 'Spanish',
+        fra: 'French',
+        deu: 'German',
+        ita: 'Italian',
+        por: 'Portuguese',
+        nld: 'Dutch',
+        rus: 'Russian',
+        zho: 'Chinese',
+        jpn: 'Japanese',
+        kor: 'Korean',
+        // Add more as needed
+      };
+      const language = langMap[langCode] || 'English';
+
       // Create user message with proper typing
       const userMessageObj: ChatMessage = {
         message: userMessage,
@@ -90,7 +109,10 @@ export class ChatService {
       const langChainApp = await this.langChainService.createLangChainApp(session.topic);
 
       // Convert history messages to LangChain format
-      const historyMessages: Array<HumanMessage | AIMessage> = [];
+      const historyMessages: Array<HumanMessage | AIMessage | SystemMessage> = [];
+
+      // Add a system message to instruct the LLM to reply in the detected language
+      historyMessages.push(new SystemMessage(`Please reply in ${language}.`));
 
       // Add previous messages as context (limit to last 10 messages to avoid token limits)
       const recentMessages = session.messages.slice(-10);
@@ -127,7 +149,6 @@ export class ChatService {
         role: 'ai',
         timestamp: new Date(),
       };
-
       // Save AI response to session history (this uses caching)
       await this.chatSessionRepository.addMessage(validSessionId, aiMessageObj);
       console.log(`AI response saved to session ${validSessionId}`);

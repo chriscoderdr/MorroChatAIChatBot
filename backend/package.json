@@ -39,6 +39,7 @@
     "class-validator": "^0.14.2",
     "cookie-parser": "^1.4.7",
     "express-session": "^1.18.1",
+    "franc": "^6.2.0",
     "langchain": "^0.3.29",
     "mongoose": "^8.16.0",
     "reflect-metadata": "^0.2.2",
