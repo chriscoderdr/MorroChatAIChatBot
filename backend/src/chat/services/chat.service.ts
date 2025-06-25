@@ -27,6 +27,7 @@ export class ChatService {
   }
 
   async invoke(userMessage: string, userId: string): Promise<string> {
+    this.logger.log(`Processing message for user ${userId}: ${userMessage}`);
     try {
       const agentWithHistory = await this.langChainService.createLangChainApp(this.defaultTopic);
       
