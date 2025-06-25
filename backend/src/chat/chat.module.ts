@@ -6,6 +6,7 @@ import { ChatSessionRepository } from './repositories/chat-session.repository';
 import { SessionCacheService } from './services/session-cache.service';
 import { ChatService } from './services/chat.service';
 import { ChatController } from './controllers/chat.controller';
+import { ChatUploadController } from './controllers/chat-upload.controller';
 
 @Module({
   imports: [
@@ -13,7 +14,7 @@ import { ChatController } from './controllers/chat.controller';
       { name: ChatSession.name, schema: ChatSessionSchema },
     ]),
   ],
-  controllers: [ChatController],
+  controllers: [ChatController, ChatUploadController],
   providers: [
     LangChainService,
     ChatSessionRepository,
