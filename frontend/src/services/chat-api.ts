@@ -38,14 +38,13 @@ export const sendMessage = async (payload: SendMessagePayload): Promise<ChatResp
 export const fetchChatHistory = async (): Promise<ChatHistory> => {
   try {
     const response = await apiClient.get<ChatMessage[]>('/chat/history');
-    
-    // Convert the array of messages into the ChatHistory format
+    // The backend now returns an array of { type, data } objects
+    const messages = response.data;
     const chatHistory: ChatHistory = {
-      sessionId: 'current-session', // You can use a default or get this from elsewhere if needed
-      messages: response.data,
-      hasMessages: response.data.length > 0
+      sessionId: 'current-session',
+      messages,
+      hasMessages: messages.length > 0
     };
-    
     return chatHistory;
   } catch (error) {
     if (axios.isAxiosError(error)) {

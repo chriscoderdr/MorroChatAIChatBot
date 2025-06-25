@@ -1,8 +1,12 @@
+
+export type ChatMessageType = 'human' | 'ai';
+
 export interface ChatMessage {
-    message: string;
-    role: 'user' | 'ai';
-    timestamp: string;
-    _id: string;
+    type: ChatMessageType;
+    data: {
+        content: string;
+        tool_calls?: any[]; // Only for AI, optional
+    };
 }
 
 export interface ChatHistory {

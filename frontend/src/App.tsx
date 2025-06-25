@@ -26,11 +26,11 @@ function App() {
   // Load chat history when component mounts
   useEffect(() => {
     if (chatHistoryQuery.data?.messages && chatHistoryQuery.data.hasMessages) {
-      // Convert the server message format to our local format
-      const historyMessages = chatHistoryQuery.data.messages.map(msg => ({
-        text: msg.message,
-        isUser: msg.role === 'user',
-        messageId: msg._id
+      // Convert the new server message format to our local format
+      const historyMessages = chatHistoryQuery.data.messages.map((msg, idx) => ({
+        text: msg.data.content,
+        isUser: msg.type === 'human',
+        messageId: `history-${idx}`
       }));
       setMessages(historyMessages);
     }

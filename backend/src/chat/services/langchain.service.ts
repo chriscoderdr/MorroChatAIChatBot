@@ -14,6 +14,7 @@ import { Model } from "mongoose";
 import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
 import { AgentExecutor, createToolCallingAgent } from "langchain/agents";
 import { BaseMessage } from "@langchain/core/messages";
+import { StringOutputParser } from "@langchain/core/output_parsers";
 
 @Injectable()
 export class LangChainService {
@@ -24,8 +25,7 @@ export class LangChainService {
     @InjectModel(ChatSession.name) private chatSessionModel: Model<ChatSession>,
   ) {}
 
-  async createLangChainApp() {
-    // --- Model Definition ---
+  async createLangChainApp(topic?: string) {
     const provider = this.configService.get<string>('ai.provider') || 'gemini';
     let llm: BaseChatModel;
     if (provider === 'openai') {
@@ -34,17 +34,16 @@ export class LangChainService {
         llm = new ChatGoogleGenerativeAI({ apiKey: process.env.GEMINI_API_KEY, model: process.env.GEMINI_MODEL || 'gemini-1.5-flash', temperature: 0 });
     }
 
-    // --- Tool Definitions ---
     const searchTool = new DynamicStructuredTool({
         name: "search",
-        description: "Searches the web for up-to-date information. Use this for any general knowledge question, or to find information needed for other tools (like finding an IANA timezone).",
-        schema: z.object({ query: z.string().describe("The search query.") }),
-        func: async ({ query }) => { try { return await new TavilySearch().invoke({ query }); } catch (e) { return "Search failed"; } },
+        description: "Searches the web for up-to-date information.",
+        schema: z.object({ query: z.string().describe("A keyword-based search query.") }),
+        func: async ({ query }) => { try { return await new TavilySearch().invoke({ query }); } catch (e) { this.logger.error(`Tavily search failed for query: ${query}`, e.stack); return "Search failed."; } },
     });
     const currentTimeTool = new DynamicStructuredTool({
         name: "current_time",
         description: "Gets the current date and time for a specific IANA timezone.",
-        schema: z.object({ timezone: z.string().describe("A valid IANA timezone name, e.g., 'America/New_York', 'Europe/London', or 'Asia/Manila'.") }),
+        schema: z.object({ timezone: z.string().describe("A valid IANA timezone name, e.g., 'America/New_York'.") }),
         func: async ({ timezone }) => {
             try {
                 return new Date().toLocaleString("en-US", { timeZone: timezone, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', timeZoneName: 'short' });
@@ -55,8 +54,7 @@ export class LangChainService {
     const tools = [searchTool, currentTimeTool];
     const llmWithTools = llm.bindTools ? llm.bindTools(tools) : llm;
     
-    // --- Agent Creation Function ---
-    const createAgentExecutor = (systemMessage: string): Promise<AgentExecutor> => {
+    const createAgentExecutor = (systemMessage: string): AgentExecutor => {
         const prompt = ChatPromptTemplate.fromMessages([
             ["system", systemMessage],
             new MessagesPlaceholder("chat_history"),
@@ -64,43 +62,53 @@ export class LangChainService {
             new MessagesPlaceholder("agent_scratchpad"),
         ]);
         const agent = createToolCallingAgent({ llm: llmWithTools, tools, prompt });
-        return Promise.resolve(new AgentExecutor({ agent, tools, verbose: true }));
+        return new AgentExecutor({ agent, tools, verbose: true });
     };
 
-    // --- Sub-Agents for Different Tasks ---
-    const timeAgent = await createAgentExecutor(`You are a specialist time-telling assistant. Your goal is to answer questions about the current time.
-- To do this, you must determine the IANA timezone for each location the user mentions.
-- Use the 'search' tool to find the IANA timezone if you don't know it.
-- Once you have the IANA timezone, use the 'current_time' tool to get the time.
-- Always perform these steps. Do not ask for permission. Do not say you cannot do it.`);
+    const timeAgent = createAgentExecutor(`You are a time-specialist. Use your tools to answer time-related questions. If you need an IANA timezone, use the 'search' tool to find it first.`);
+    const generalAgent = createAgentExecutor(`You are a master research assistant. Use the 'search' tool to answer questions. Formulate specific, keyword-based queries in the user's language. Use the chat history to create better search queries for follow-up questions. If your first search fails, try a different query.`);
 
-    const generalAgent = await createAgentExecutor(`You are a helpful assistant. Your goal is to answer general knowledge questions.
-- To do this, you MUST use the 'search' tool.
-- Do not apologize or claim you cannot access information. Use the search tool to find it.`);
+    // This is our main runnable. It's a single Lambda that contains all the logic.
+    const finalRunnable = new RunnableLambda({
+        func: async (input: { input: string; chat_history: BaseMessage[] }) => {
+            // 1. Topic Guard Check (if topic is set)
+            if (topic) {
+                const topicPrompt = ChatPromptTemplate.fromTemplate(`Is the following question: "{input}" related to the topic of "${topic}"? Answer only with a single word: "yes" or "no".`);
+                const topicChecker = topicPrompt.pipe(llm).pipe(new StringOutputParser());
+                const topicResponse = await topicChecker.invoke(input);
+                if (topicResponse.toLowerCase().includes("no")) {
+                    this.logger.warn(`Off-topic query blocked by Topic Guard: "${input.input}"`);
+                    return { output: `I'm sorry, I can only answer questions related to the topic of "${topic}".` };
+                }
+            }
 
-    // --- Router to Select the Correct Agent ---
-    const router = new RunnableLambda({
-        func: async ({ input, chat_history }: { input: string; chat_history: BaseMessage[] }) => {
-            const lowerCaseInput = input.toLowerCase();
-            const timeKeywords = ['hora', 'time', 'fecha', 'date', 'día es hoy'];
+            // 2. Agent Router
+            const lowerCaseInput = input.input.toLowerCase();
+            const timeKeywords = ['hora', 'time', 'fecha', 'date', 'día', 'dia'];
+            let selectedAgent: AgentExecutor;
+
             if (timeKeywords.some(k => lowerCaseInput.includes(k))) {
                 this.logger.debug("Routing to Time Agent");
-                return await timeAgent.invoke({ input, chat_history });
+                selectedAgent = timeAgent;
+            } else {
+                this.logger.debug("Routing to General Agent");
+                selectedAgent = generalAgent;
             }
-            this.logger.debug("Routing to General Agent");
-            return await generalAgent.invoke({ input, chat_history });
+
+            // 3. Invoke the selected agent
+            return selectedAgent.invoke({
+                input: input.input,
+                chat_history: input.chat_history
+            });
         }
     });
 
-    // --- The Final Chain with History ---
     const agentWithHistory = new RunnableWithMessageHistory({
-        runnable: router, // The router now directly handles the invocation
+        runnable: finalRunnable,
         getMessageHistory: (sessionId: string) => new MongoDBChatMessageHistory(this.chatSessionModel, sessionId),
         inputMessagesKey: "input",
         historyMessagesKey: "chat_history",
-        // The output of an AgentExecutor is an object with an "output" key
-        // The history wrapper needs to know this to save the correct message.
-        outputMessagesKey: "output",
+        outputMessagesKey: "output"
     });
 
     return agentWithHistory;
