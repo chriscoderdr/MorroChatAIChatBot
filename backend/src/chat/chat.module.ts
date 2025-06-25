@@ -7,6 +7,8 @@ import { SessionCacheService } from './services/session-cache.service';
 import { ChatService } from './services/chat.service';
 import { ChatController } from './controllers/chat.controller';
 import { ChatUploadController } from './controllers/chat-upload.controller';
+import { PdfVectorService } from './services/pdf-vector.service';
+import { PdfRetrievalService } from './services/pdf-retrieval.service';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { ChatUploadController } from './controllers/chat-upload.controller';
     ChatSessionRepository,
     SessionCacheService,
     ChatService,
+    PdfVectorService,
+    PdfRetrievalService,
   ],
   exports: [ChatService],
 })
