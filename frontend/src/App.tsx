@@ -205,7 +205,7 @@ function App() {
                     progress={fileUpload.progress}
                   />
                 )}
-                {chatMutation.isPending && (
+                {(chatMutation.isPending || uploadPdfMutation.isPending) && (
                   <ChatMessage message={{ text: '', isUser: false }} />
                 )}
               </div>
@@ -214,7 +214,7 @@ function App() {
         </main>
         <ChatInput
           onSendMessage={handleSendMessage}
-          isLoading={chatMutation.isPending}
+          isLoading={chatMutation.isPending || uploadPdfMutation.isPending}
         />
       </div>
     </div>

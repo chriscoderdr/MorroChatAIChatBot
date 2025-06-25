@@ -53,6 +53,11 @@ export class ChatUploadController {
         }
       );
       answer = typeof response === 'string' ? response : (response as any).output;
+      // Add the Q&A to the chat history
+      await this.chatService.processChat(message, userId); // user question
+      if (typeof answer === 'string') {
+        await this.chatService.processChat(answer, userId);  // AI answer
+      }
     }
 
     return {
