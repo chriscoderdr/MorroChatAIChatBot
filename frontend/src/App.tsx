@@ -193,17 +193,17 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white">
+    <div className="flex flex-col md:flex-row h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white">
       <Sidebar onNewChat={handleNewChat} />
-      <div className="flex flex-col flex-1">
+      <div className="flex flex-col flex-1 min-w-0">
         <Header />
-        <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-4xl mx-auto">
+        <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-2 sm:p-4 md:p-6">
+          <div className="max-w-4xl mx-auto w-full">
             {/* Show empty state or history loading/error if no messages */}
             {messages.length === 0 ? (
               chatHistoryQuery.isLoading ? (
-                <div className="flex justify-center items-center h-64">
-                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+                <div className="flex justify-center items-center h-40 sm:h-64">
+                  <div className="animate-spin rounded-full h-8 w-8 sm:h-12 sm:w-12 border-t-2 border-b-2 border-blue-500"></div>
                 </div>
               ) : chatHistoryQuery.isError ? (
                 <ChatHistoryError 
@@ -216,7 +216,7 @@ function App() {
             ) : null}
             {/* Show chat messages if any */}
             {messages.length > 0 && (
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 {messages.map((msg, index) => (
                   <ChatMessage
                     key={msg.messageId || index}
@@ -233,7 +233,7 @@ function App() {
         </main>
         {/* Always show file upload bubble if uploading or feedback is needed */}
         {fileUpload && fileUpload.status && (
-          <div className="px-6 pb-2 max-w-4xl mx-auto w-full">
+          <div className="px-2 sm:px-6 pb-2 max-w-4xl mx-auto w-full">
             <FileUploadBubble
               fileName={fileUpload.fileName}
               status={fileUpload.status}

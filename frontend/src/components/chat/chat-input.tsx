@@ -25,16 +25,16 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }
     };
 
     return (
-        <div className="p-4 bg-gray-900/80 backdrop-blur-sm border-t border-gray-700">
+        <div className="p-2 sm:p-4 bg-gray-900/80 backdrop-blur-sm border-t border-gray-700">
             <div className="relative max-w-4xl mx-auto flex flex-col gap-2">
-                <div className="flex gap-2 items-center">
+                <div className="flex gap-1 sm:gap-2 items-center">
                     <input
                         type="text"
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={handleKeyDown}
                         placeholder={isLoading ? "MorroChat is thinking..." : "Message MorroChat..."}
-                        className="flex-1 bg-gray-800 border border-gray-700 rounded-full py-3 pl-6 pr-16 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                        className="flex-1 bg-gray-800 border border-gray-700 rounded-full py-2 sm:py-3 pl-4 sm:pl-6 pr-12 sm:pr-16 text-xs sm:text-base text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                         disabled={isLoading}
                     />
                     <FileUpload

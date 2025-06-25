@@ -47,9 +47,9 @@ export const FileUploadBubble: React.FC<FileUploadBubbleProps> = ({ fileName, st
   }
 
   return (
-    <div className={`max-w-xl px-4 py-3 rounded-2xl flex items-center gap-2 ${bubbleClasses}`}>
-      <HiOutlineDocumentText className="w-6 h-6" />
-      <span className="font-medium text-sm truncate max-w-xs">{fileName}</span>
+    <div className={`w-full max-w-xs sm:max-w-md md:max-w-xl px-2 sm:px-4 py-2 sm:py-3 rounded-2xl flex flex-wrap items-center gap-1 sm:gap-2 ${bubbleClasses}`}>
+      <HiOutlineDocumentText className="w-5 h-5 sm:w-6 sm:h-6" />
+      <span className="font-medium text-xs sm:text-sm truncate max-w-[100px] sm:max-w-xs">{fileName}</span>
       {statusContent}
     </div>
   );

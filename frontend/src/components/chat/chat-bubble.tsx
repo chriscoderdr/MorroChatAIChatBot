@@ -23,7 +23,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
 
   if (isTyping) {
     return (
-        <div className={`max-w-xl px-4 py-3 rounded-2xl ${isUser ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'} flex items-center space-x-1`}>
+        <div className={`w-full max-w-xs sm:max-w-md md:max-w-xl px-2 sm:px-4 py-2 sm:py-3 rounded-2xl ${isUser ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'} flex items-center space-x-1`}>
             <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.3s]"></span>
             <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.15s]"></span>
             <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></span>
@@ -32,11 +32,11 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   }
 
   return (
-    <div className={`max-w-xl px-4 py-3 rounded-2xl ${bubbleClasses}`}>
-      <p className="text-sm whitespace-pre-wrap">{message}</p>
+    <div className={`w-full max-w-xs sm:max-w-md md:max-w-xl px-2 sm:px-4 py-2 sm:py-3 rounded-2xl ${bubbleClasses}`}>
+      <p className="text-xs sm:text-sm whitespace-pre-wrap">{message}</p>
       
       {isError && onRetry && (
-        <div className="mt-3 flex items-center">
+        <div className="mt-2 sm:mt-3 flex items-center">
           <button 
             onClick={onRetry}
             className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-xs font-medium rounded-md transition-colors"
