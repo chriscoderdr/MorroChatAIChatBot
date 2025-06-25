@@ -3,6 +3,7 @@ import { Header } from './components/layout/header';
 import { Sidebar } from './components/layout/side-bar';
 import { ChatMessage } from './components/chat/chat-message';
 import { ChatInput } from './components/chat/chat-input';
+import { FileUploadBubble } from './components/chat/file-upload-bubble';
 import { EmptyState } from './components/chat/empty-state';
 import { ChatHistoryError } from './components/chat/chat-history-error';
 import { useChatMutation } from './hooks/useChatMutation';
@@ -19,9 +20,51 @@ interface IMessage {
 function App() {
   const [messages, setMessages] = useState<IMessage[]>([]);
   const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null);
+  const [fileUpload, setFileUpload] = useState<{
+    fileName: string;
+    status: 'uploading' | 'failed' | 'retrying' | 'success' | null;
+    errorMessage?: string;
+  } | null>(null);
   const chatMutation = useChatMutation();
   const chatHistoryQuery = useChatHistory();
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  // Simulate file upload (frontend only)
+  const handleUploadFile = (file: File) => {
+    setFileUpload({ fileName: file.name, status: 'uploading' });
+    // Simulate upload delay and random error
+    setTimeout(() => {
+      if (Math.random() < 0.2) {
+        setFileUpload({ fileName: file.name, status: 'failed', errorMessage: 'Network error' });
+      } else {
+        setFileUpload({ fileName: file.name, status: 'success' });
+        // Add a message to the chat for the uploaded file
+        setMessages(prev => [...prev, {
+          text: `[PDF Uploaded] ${file.name}`,
+          isUser: true,
+          messageId: `file-${Date.now()}`
+        }]);
+        setTimeout(() => setFileUpload(null), 1200);
+      }
+    }, 1800);
+  };
+
+  const handleRetryUpload = () => {
+    if (fileUpload?.fileName) {
+      setFileUpload({ fileName: fileUpload.fileName, status: 'retrying' });
+      setTimeout(() => {
+        setFileUpload({ fileName: fileUpload.fileName, status: 'uploading' });
+        setTimeout(() => {
+          setFileUpload({ fileName: fileUpload.fileName, status: 'success' });
+          setMessages(prev => [...prev, {
+            text: `[PDF Uploaded] ${fileUpload.fileName}`,
+            isUser: true,
+            messageId: `file-${Date.now()}`
+          }]);
+          setTimeout(() => setFileUpload(null), 1200);
+        }, 1500);
+      }, 800);
+    }
+  };
 
   // Load chat history when component mounts
   useEffect(() => {
@@ -120,6 +163,14 @@ function App() {
                     onRetry={msg.isError ? handleRetry : undefined}
                   />
                 ))}
+                {fileUpload && fileUpload.status && fileUpload.status !== 'success' && (
+                  <FileUploadBubble
+                    fileName={fileUpload.fileName}
+                    status={fileUpload.status}
+                    errorMessage={fileUpload.errorMessage}
+                    onRetry={fileUpload.status === 'failed' ? handleRetryUpload : undefined}
+                  />
+                )}
                 {chatMutation.isPending && (
                   <ChatMessage message={{ text: '', isUser: false }} />
                 )}
@@ -127,7 +178,14 @@ function App() {
             )}
           </div>
         </main>
-        <ChatInput onSendMessage={handleSendMessage} isLoading={chatMutation.isPending} />
+        <ChatInput
+          onSendMessage={handleSendMessage}
+          isLoading={chatMutation.isPending}
+          onUploadFile={handleUploadFile}
+          isUploading={!!fileUpload && (fileUpload.status === 'uploading' || fileUpload.status === 'retrying')}
+          uploadError={fileUpload && fileUpload.status === 'failed' ? fileUpload.errorMessage || 'Upload failed' : null}
+          onRetryUpload={handleRetryUpload}
+        />
       </div>
     </div>
   );
