@@ -192,12 +192,17 @@ function App() {
     });
   };
 
+  const fileUploadBubbleVisible = !!(fileUpload && fileUpload.status);
+
   return (
     <div className="flex flex-col md:flex-row h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white">
       <Sidebar onNewChat={handleNewChat} />
       <div className="flex flex-col flex-1 min-w-0">
         <Header />
-        <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-2 sm:p-4 md:p-6">
+        <main
+          ref={chatContainerRef}
+          className={`flex-1 overflow-y-auto p-2 sm:p-4 md:p-6 transition-all duration-300 ${fileUploadBubbleVisible ? 'pb-20 sm:pb-24' : ''}`}
+        >
           <div className="max-w-4xl mx-auto w-full">
             {/* Show empty state or history loading/error if no messages */}
             {messages.length === 0 ? (
@@ -231,16 +236,18 @@ function App() {
             )}
           </div>
         </main>
-        {/* Always show file upload bubble if uploading or feedback is needed */}
-        {fileUpload && fileUpload.status && (
-          <div className="px-2 sm:px-6 pb-2 max-w-4xl mx-auto w-full">
-            <FileUploadBubble
-              fileName={fileUpload.fileName}
-              status={fileUpload.status}
-              errorMessage={fileUpload.errorMessage}
-              progress={fileUpload.progress}
-              onRetry={handleRetryUpload}
-            />
+        {/* Sticky file upload bubble above the input */}
+        {fileUploadBubbleVisible && fileUpload && fileUpload.status && (
+          <div className="fixed left-0 right-0 bottom-20 sm:bottom-24 z-30 flex justify-center pointer-events-none">
+            <div className="w-full max-w-4xl px-2 sm:px-6 pointer-events-auto">
+              <FileUploadBubble
+                fileName={fileUpload.fileName}
+                status={fileUpload.status as 'uploading' | 'failed' | 'retrying' | 'success'}
+                errorMessage={fileUpload.errorMessage}
+                progress={fileUpload.progress}
+                onRetry={handleRetryUpload}
+              />
+            </div>
           </div>
         )}
         <ChatInput
