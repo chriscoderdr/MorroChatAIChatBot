@@ -8,7 +8,7 @@ import { FileUploadBubble } from './components/chat/file-upload-bubble';
 import { EmptyState } from './components/chat/empty-state';
 import { ChatHistoryError } from './components/chat/chat-history-error';
 import { useChatMutation } from './hooks/useChatMutation';
-import axios from 'axios';
+import { useUploadPdfMutation } from './hooks/useUploadPdfMutation';
 import { useChatHistory } from './hooks/useChatHistory';
 
 
@@ -20,6 +20,7 @@ interface IMessage {
 }
 
 function App() {
+  const uploadPdfMutation = useUploadPdfMutation();
   const newChatMutation = useNewChatMutation();
   // Handler for starting a new chat session
   const handleNewChat = () => {
@@ -43,50 +44,47 @@ function App() {
   const chatHistoryQuery = useChatHistory();
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
-  // Real upload to backend with progress
-  const uploadPdfWithMessage = async (file: File, message: string) => {
+  // Real upload to backend with progress using react-query
+  const uploadPdfWithMessage = (file: File, message: string) => {
     setFileUpload({ fileName: file.name, status: 'uploading', progress: 0, file, message });
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('message', message);
     const minDisplayTime = 800; // ms
     const uploadStart = Date.now();
-    try {
-      await axios.post('http://localhost:3000/chat/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: (progressEvent) => {
-          const percent = progressEvent.total ? Math.round((progressEvent.loaded * 100) / progressEvent.total) : 0;
-          setFileUpload(prev => prev ? { ...prev, progress: percent } : null);
-        },
-        withCredentials: true,
-      });
-      const elapsed = Date.now() - uploadStart;
-      const showSuccess = () => {
-        setFileUpload({ fileName: file.name, status: 'success', progress: 100, file, message });
-        setMessages(prev => [...prev, {
-          text: `${message ? message + ' ' : ''}[PDF Uploaded] ${file.name}`,
-          isUser: true,
-          messageId: `file-${Date.now()}`
-        }]);
-        setTimeout(() => setFileUpload(null), 1200);
-      };
-      if (elapsed < minDisplayTime) {
-        setTimeout(showSuccess, minDisplayTime - elapsed);
-      } else {
-        showSuccess();
-      }
-      // Optionally, handle response.data for further integration
-    } catch (error: any) {
-      const elapsed = Date.now() - uploadStart;
-      const showError = () => {
-        setFileUpload({ fileName: file.name, status: 'failed', errorMessage: error?.message || 'Upload failed', progress: 100, file, message });
-      };
-      if (elapsed < minDisplayTime) {
-        setTimeout(showError, minDisplayTime - elapsed);
-      } else {
-        showError();
-      }
-    }
+    uploadPdfMutation.mutate({
+      file,
+      message,
+      onUploadProgress: (percent) => {
+        setFileUpload(prev => prev ? { ...prev, progress: percent } : null);
+      },
+    }, {
+      onSuccess: (data) => {
+        const elapsed = Date.now() - uploadStart;
+        const showSuccess = () => {
+          setFileUpload({ fileName: file.name, status: 'success', progress: 100, file, message });
+          setMessages(prev => [...prev, {
+            text: `${message ? message + ' ' : ''}[PDF Uploaded] ${file.name}`,
+            isUser: true,
+            messageId: `file-${Date.now()}`
+          }]);
+          setTimeout(() => setFileUpload(null), 1200);
+        };
+        if (elapsed < minDisplayTime) {
+          setTimeout(showSuccess, minDisplayTime - elapsed);
+        } else {
+          showSuccess();
+        }
+      },
+      onError: (error: any) => {
+        const elapsed = Date.now() - uploadStart;
+        const showError = () => {
+          setFileUpload({ fileName: file.name, status: 'failed', errorMessage: error?.message || 'Upload failed', progress: 100, file, message });
+        };
+        if (elapsed < minDisplayTime) {
+          setTimeout(showError, minDisplayTime - elapsed);
+        } else {
+          showError();
+        }
+      },
+    });
   };
 
   const handleRetryUpload = () => {

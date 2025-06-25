@@ -1,5 +1,16 @@
-import axios from 'axios';
+import type { AxiosProgressEvent } from 'axios';
 import type { ChatHistory, ChatMessage } from '../models/chatMessage';
+import axios from 'axios';
+export interface UploadPdfResponse {
+  message?: string;
+  fileName?: string;
+}
+
+
+
+export interface NewChatResponse {
+  message?: string;
+}
 
 export interface SendMessagePayload {
   message: string;
@@ -9,6 +20,30 @@ export interface ChatResponse {
   reply: string;
 }
 
+export const uploadPdfWithMessageApi = async (
+  file: File,
+  message: string,
+  onUploadProgress?: (percent: number) => void
+): Promise<UploadPdfResponse> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('message', message);
+  const config = {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    withCredentials: true,
+    onUploadProgress: (progressEvent: AxiosProgressEvent) => {
+      if (progressEvent.total) {
+        const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+        if (onUploadProgress) onUploadProgress(percent);
+      }
+    },
+  };
+  const response = await apiClient.post<UploadPdfResponse>('/chat/upload', formData, config);
+  return response.data;
+};
+
+
+
 export const apiClient = axios.create({
   baseURL: 'http://localhost:3000',
   headers: {
@@ -16,6 +51,20 @@ export const apiClient = axios.create({
   },
   withCredentials: true, // This enables sending cookies with cross-origin requests
 });
+
+export const startNewChat = async (): Promise<NewChatResponse> => {
+  try {
+    const response = await apiClient.post<NewChatResponse>('/chat/new');
+    return response.data;
+  } catch (error: any) {
+    if (error && error.response && error.response.data && error.response.data.message) {
+      throw new Error(error.response.data.message);
+    }
+    throw new Error('Failed to start new chat session');
+  }
+};
+
+
 
 export const sendMessage = async (payload: SendMessagePayload): Promise<ChatResponse> => {
   try {

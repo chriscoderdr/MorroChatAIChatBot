@@ -41,10 +41,17 @@ export class ChatUploadController {
       const contextChunks = (results.documents?.[0] || []).join('\n\n');
       // Use Gemini LLM to answer the question with the context
       const llm = await this.langChainService.createLangChainApp();
-      const response = await llm.invoke({
-        input: `Given the following document context, answer the user's question.\n\nContext:\n${contextChunks}\n\nQuestion: ${message}`,
-        chat_history: [],
-      });
+      const response = await llm.invoke(
+        {
+          input: `Given the following document context, answer the user's question.\n\nContext:\n${contextChunks}\n\nQuestion: ${message}`,
+          chat_history: [],
+        },
+        {
+          configurable: {
+            sessionId: userId,
+          },
+        }
+      );
       answer = typeof response === 'string' ? response : (response as any).output;
     }
 
