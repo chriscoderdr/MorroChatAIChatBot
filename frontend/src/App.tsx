@@ -195,15 +195,16 @@ function App() {
   const fileUploadBubbleVisible = !!(fileUpload && fileUpload.status);
 
   return (
-    <div className="flex flex-col md:flex-row h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white">
+    <div className="flex flex-col md:flex-row min-h-screen h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white">
       <Sidebar onNewChat={handleNewChat} />
       <div className="flex flex-col flex-1 min-w-0">
         <Header />
         <main
           ref={chatContainerRef}
-          className={`flex-1 overflow-y-auto p-2 sm:p-4 md:p-6 transition-all duration-300 ${fileUploadBubbleVisible ? 'pb-20 sm:pb-24' : ''}`}
+          className={`flex-1 overflow-y-auto p-2 sm:p-4 md:p-6 transition-all duration-300 ${fileUploadBubbleVisible ? 'pb-[120px] sm:pb-[140px]' : 'pb-[env(safe-area-inset-bottom)]'}`}
+          style={{ minHeight: '0', height: '100%', boxSizing: 'border-box' }}
         >
-          <div className="max-w-4xl mx-auto w-full">
+          <div className="max-w-4xl mx-auto w-full min-h-[60vh] flex flex-col justify-end">
             {/* Show empty state or history loading/error if no messages */}
             {messages.length === 0 ? (
               chatHistoryQuery.isLoading ? (
@@ -238,7 +239,7 @@ function App() {
         </main>
         {/* Sticky file upload bubble above the input */}
         {fileUploadBubbleVisible && fileUpload && fileUpload.status && (
-          <div className="fixed left-0 right-0 bottom-20 sm:bottom-24 z-30 flex justify-center pointer-events-none">
+          <div className="fixed left-0 right-0 z-30 flex justify-center pointer-events-none" style={{ bottom: '72px', paddingBottom: 'env(safe-area-inset-bottom)' }}>
             <div className="w-full max-w-4xl px-2 sm:px-6 pointer-events-auto">
               <FileUploadBubble
                 fileName={fileUpload.fileName}
@@ -250,10 +251,13 @@ function App() {
             </div>
           </div>
         )}
-        <ChatInput
-          onSendMessage={handleSendMessage}
-          isLoading={chatMutation.isPending || uploadPdfMutation.isPending}
-        />
+        {/* Sticky input at the bottom, always above safe area/tab bar */}
+        <div className="sticky bottom-0 left-0 right-0 z-40 bg-gray-900/80 backdrop-blur-sm border-t border-gray-700" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <ChatInput
+            onSendMessage={handleSendMessage}
+            isLoading={chatMutation.isPending || uploadPdfMutation.isPending}
+          />
+        </div>
       </div>
     </div>
   );
