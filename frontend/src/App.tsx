@@ -199,6 +199,7 @@ function App() {
         <Header />
         <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-6">
           <div className="max-w-4xl mx-auto">
+            {/* Show empty state or history loading/error if no messages */}
             {messages.length === 0 ? (
               chatHistoryQuery.isLoading ? (
                 <div className="flex justify-center items-center h-64">
@@ -213,25 +214,13 @@ function App() {
                 <EmptyState onSuggestionClick={handleSendMessage} />
               )
             ) : null}
-            {/* Always show file upload bubble if uploading or feedback is needed */}
-            {fileUpload && fileUpload.status && (
-              <div className="space-y-6">
-                <FileUploadBubble
-                  fileName={fileUpload.fileName}
-                  status={fileUpload.status}
-                  errorMessage={fileUpload.errorMessage}
-                  progress={fileUpload.progress}
-                  onRetry={handleRetryUpload}
-                />
-              </div>
-            )}
             {/* Show chat messages if any */}
             {messages.length > 0 && (
               <div className="space-y-6">
                 {messages.map((msg, index) => (
-                  <ChatMessage 
-                    key={msg.messageId || index} 
-                    message={msg} 
+                  <ChatMessage
+                    key={msg.messageId || index}
+                    message={msg}
                     onRetry={msg.isError ? handleRetry : undefined}
                   />
                 ))}
@@ -242,6 +231,18 @@ function App() {
             )}
           </div>
         </main>
+        {/* Always show file upload bubble if uploading or feedback is needed */}
+        {fileUpload && fileUpload.status && (
+          <div className="px-6 pb-2 max-w-4xl mx-auto w-full">
+            <FileUploadBubble
+              fileName={fileUpload.fileName}
+              status={fileUpload.status}
+              errorMessage={fileUpload.errorMessage}
+              progress={fileUpload.progress}
+              onRetry={handleRetryUpload}
+            />
+          </div>
+        )}
         <ChatInput
           onSendMessage={handleSendMessage}
           isLoading={chatMutation.isPending || uploadPdfMutation.isPending}

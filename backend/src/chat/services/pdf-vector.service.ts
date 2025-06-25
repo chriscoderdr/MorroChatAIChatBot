@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ChromaClient } from 'chromadb';
+import { ChromaService } from './chroma.service';
 import * as pdfParse from 'pdf-parse';
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
 import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai';
@@ -7,15 +7,10 @@ import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai';
 @Injectable()
 export class PdfVectorService {
   private readonly logger = new Logger(PdfVectorService.name);
-  private chroma: ChromaClient;
+  private chroma;
 
-  constructor() {
-    // Parse CHROMA_URL for host, port, and ssl
-    const url = new URL(process.env.CHROMA_URL || 'http://localhost:8000');
-    const host = url.hostname;
-    const port = Number(url.port) || 8000;
-    const ssl = url.protocol === 'https:';
-    this.chroma = new ChromaClient({ host, port, ssl });
+  constructor(private readonly chromaService: ChromaService) {
+    this.chroma = this.chromaService.getClient();
   }
 
   async vectorizeAndStorePdf(fileBuffer: Buffer, userId: string, message?: string) {

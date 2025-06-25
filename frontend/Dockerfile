@@ -5,7 +5,7 @@ COPY package*.json ./
 RUN npm set fetch-retries 5 \
   && npm set fetch-retry-mintimeout 20000 \
   && npm set fetch-retry-maxtimeout 120000 \
-  && until npm ci --omit=dev; do echo "Retrying npm ci..."; sleep 10; done
+  && until npm ci; do echo "Retrying npm ci..."; sleep 10; done
 COPY . .
 RUN npm run build
 

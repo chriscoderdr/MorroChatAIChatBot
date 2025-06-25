@@ -9,6 +9,7 @@ import { ChatController } from './controllers/chat.controller';
 import { ChatUploadController } from './controllers/chat-upload.controller';
 import { PdfVectorService } from './services/pdf-vector.service';
 import { PdfRetrievalService } from './services/pdf-retrieval.service';
+import { ChromaService } from './services/chroma.service';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { PdfRetrievalService } from './services/pdf-retrieval.service';
     ChatService,
     PdfVectorService,
     PdfRetrievalService,
+    ChromaService,
   ],
   exports: [ChatService],
 })

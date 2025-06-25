@@ -1,9 +1,15 @@
-import { Injectable } from '@nestjs/common';
-import { ChromaClient } from 'chromadb';
+import { Injectable, Logger } from '@nestjs/common';
+import { ChromaService } from './chroma.service';
+
 
 @Injectable()
 export class PdfRetrievalService {
-  private chroma = new ChromaClient({ path: process.env.CHROMA_URL || 'http://localhost:8000' });
+  private readonly logger = new Logger(PdfRetrievalService.name);
+  private chroma;
+
+  constructor(private readonly chromaService: ChromaService) {
+    this.chroma = this.chromaService.getClient();
+  }
 
   async similaritySearch(userId: string, queryEmbedding: number[], k = 5) {
     const collectionName = `user_${userId}`;

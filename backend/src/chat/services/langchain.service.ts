@@ -56,16 +56,34 @@ export class LangChainService {
         // Embed the question
         const embedder = new (require('@langchain/google-genai').GoogleGenerativeAIEmbeddings)({ apiKey: process.env.GEMINI_API_KEY });
         const [queryEmbedding] = await embedder.embedDocuments([question]);
-        // Query ChromaDB for this user
-        const chroma = new ChromaClient({ path: process.env.CHROMA_URL || 'http://localhost:8000' });
+        // Query ChromaDB for this user (parse CHROMA_URL like PdfVectorService)
+        const chromaUrl = process.env.CHROMA_URL || "";
+        const logger = this.logger || console;
+        logger.debug?.(`CHROMA_URL: ${chromaUrl}`);
+        let host = '';
+        let port = 8000;
+        let ssl = false;
+        try {
+          const url = new URL(chromaUrl);
+          host = url.hostname;
+          port = Number(url.port) || 8000;
+          ssl = false;
+          logger.debug?.(`Parsed Chroma host: ${host}, port: ${port}, ssl: ${ssl}`);
+        } catch (err) {
+          logger.error?.(`Failed to parse CHROMA_URL: ${chromaUrl}`, err);
+        }
+        logger.debug?.(`Attempting to connect to ChromaClient with host=${host}, port=${port}, ssl=${ssl}`);
+        const chroma = new ChromaClient({ host, port, ssl });
         const collectionName = `user_${sessionId}`;
         const collection = await chroma.getOrCreateCollection({ name: collectionName });
-        const results = await collection.query({ queryEmbeddings: [queryEmbedding], nResults: 5, include: ["metadatas", "documents", "distances"] });
+        // Use similarity search: only return the most similar chunks (not all parts)
+        const nResults = 5;
+        const results = await collection.query({ queryEmbeddings: [queryEmbedding], nResults, include: ["metadatas", "documents", "distances"] });
         const docs = results.documents?.[0] || [];
         const metadatas = results.metadatas?.[0] || [];
         const distances = results.distances?.[0] || [];
         if (!docs.length) return "No relevant information found in your uploaded document.";
-        // Build a detailed context with metadata
+        // Build a detailed context with metadata for only the most similar chunks
         let context = docs.map((doc, i) => {
           const meta = metadatas[i] || {};
           const dist = distances[i];

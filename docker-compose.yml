@@ -14,17 +14,34 @@ services:
     volumes:
       - mongo_data:/data/db
 
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: morrochat-chromadb
+    restart: unless-stopped
+    environment:
+      IS_PERSISTENT: 'TRUE'
+      PERSIST_DIRECTORY: /chroma/.chroma/index
+      CHROMA_SERVER_AUTH_CREDENTIALS_PROVIDER: 'chromadb.auth.providers.NoAuthServerProvider'
+    ports:
+      - '8000:8000'
+    volumes:
+      - chroma_data:/chroma/.chroma/index
+
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: morrochat-backend
     restart: unless-stopped
+    env_file:
+      - ./backend/.env
     environment:
       MONGODB_URI: mongodb://root:example@mongo:27017/morrochat?authSource=admin
       NODE_ENV: production
+      CHROMA_URL: http://chromadb:8000
     depends_on:
       - mongo
+      - chromadb
     ports:
       - '3000:3000'
 
@@ -43,3 +60,4 @@ services:
 
 volumes:
   mongo_data:
+  chroma_data:
