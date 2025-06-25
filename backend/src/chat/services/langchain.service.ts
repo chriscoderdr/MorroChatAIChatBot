@@ -7,7 +7,7 @@ import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { ChatOpenAI } from "@langchain/openai";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { RunnableLambda, RunnableWithMessageHistory } from "@langchain/core/runnables";
-import { TIME_AGENT_PROMPT, WEATHER_AGENT_PROMPT, GENERAL_AGENT_PROMPT } from "../prompts/agent-prompts";
+import { TIME_AGENT_PROMPT, WEATHER_AGENT_PROMPT, GENERAL_AGENT_PROMPT, DOCUMENT_AGENT_PROMPT, RESEARCH_AGENT_PROMPT } from "../prompts/agent-prompts";
 import { ChromaClient } from 'chromadb';
 import { MongoDBChatMessageHistory } from "./mongodb.chat.message.history";
 import { InjectModel } from "@nestjs/mongoose";
@@ -36,8 +36,8 @@ export class LangChainService {
     }
 
     const searchTool = new DynamicStructuredTool({
-      name: "search",
-      description: "Searches the web for up-to-date information.",
+      name: "web_search",
+      description: "Searches the web for up-to-date information. Research info about companies. Resarch info.",
       schema: z.object({ query: z.string().describe("A keyword-based search query.") }),
       func: async ({ query }) => { try { return await new TavilySearch().invoke({ query }); } catch (e) { this.logger.error(`Tavily search failed for query: ${query}`, e.stack); return "Search failed."; } },
     });
@@ -88,11 +88,10 @@ export class LangChainService {
           const meta = metadatas[i] || {};
           const dist = distances[i];
           const safeDoc = doc ?? '';
-          return `---\nChunk #${meta.chunk ?? i} (distance: ${dist?.toFixed(3) ?? 'N/A'})\nLength: ${safeDoc.length} chars\nMessage: ${meta.message ?? ''}\nSource: ${meta.source ?? ''}\nContent:\n${safeDoc}`;
-        }).join("\n\n");
-        // Return a more helpful answer
-        return `Here are the most relevant parts of your uploaded document for your question:\n\n${context}`;
-      },
+          // Return a string that includes all relevant info for the agent to process
+          return `--- Chunk Source: ${meta.source ?? 'N/A'}, Chunk Number: ${meta.chunk ?? i}, Distance: ${dist?.toFixed(3) ?? 'N/A'} ---\\n${safeDoc}`;        }).join("\\n\\n");
+        // Return ONLY the context. The agent will formulate the answer.
+        return context;      },
     });
     const currentTimeTool = new DynamicStructuredTool({
       name: "current_time",
@@ -130,14 +129,14 @@ export class LangChainService {
     const tools = [searchTool, currentTimeTool, openWeatherMapTool, chromaTool];
     const llmWithTools = llm.bindTools ? llm.bindTools(tools) : llm;
 
-    const createAgentExecutor = (systemMessage: string): AgentExecutor => {
+    const createAgentExecutor = (systemMessage: string, agentType: 'general' | 'specialized' = 'specialized'): AgentExecutor => {
       let finalSystemMessage = systemMessage;
-      // Stronger system prompt to force chromatool usage for document questions
+
+      // If topic is set, prepend a strict topic rule to ALL agents (not just general)
       if (topic) {
-        finalSystemMessage = `Your most important rule is that you are an assistant dedicated ONLY to the topic of "${topic}". You must politely refuse any request that is not directly related to this topic.\n\n` + GENERAL_AGENT_PROMPT;
-      } else {
-        finalSystemMessage = GENERAL_AGENT_PROMPT;
+        finalSystemMessage = `Your most important rule is that you are an assistant dedicated ONLY to the topic of "${topic}". You must politely refuse any request that is not directly related to this topic.\n\n` + systemMessage;
       }
+
       const prompt = ChatPromptTemplate.fromMessages([
         ["system", finalSystemMessage],
         new MessagesPlaceholder("chat_history"),
@@ -148,9 +147,12 @@ export class LangChainService {
       return new AgentExecutor({ agent, tools, verbose: true });
     };
 
-    const timeAgent = createAgentExecutor(TIME_AGENT_PROMPT);
-    const weatherAgent = createAgentExecutor(WEATHER_AGENT_PROMPT);
-    const generalAgent = createAgentExecutor(GENERAL_AGENT_PROMPT);
+    const timeAgent = createAgentExecutor(TIME_AGENT_PROMPT); // Defaults to 'specialized'
+    const weatherAgent = createAgentExecutor(WEATHER_AGENT_PROMPT); // Defaults to 'specialized'
+    // Always use the detailed RESEARCH_AGENT_PROMPT for the research agent, even with chat history
+    const researchAgent = createAgentExecutor(RESEARCH_AGENT_PROMPT); // Dedicated research agent
+    const generalAgent = createAgentExecutor(GENERAL_AGENT_PROMPT, 'general');
+    const documentAgent = createAgentExecutor(DOCUMENT_AGENT_PROMPT); // Defaults to 'specialized'
 
     // This is our main runnable. It's a single Lambda that contains all the logic.
     const finalRunnable = new RunnableLambda({
@@ -160,15 +162,53 @@ export class LangChainService {
 
         const timeKeywords = ['hora', 'time', 'fecha', 'date', 'día', 'dia'];
         const weatherKeywords = ['clima', 'temperatura', 'weather', 'pronóstico', 'forecast', 'tiempo'];
+        const documentKeywords = ['documento', 'pdf', 'file', 'archivo', 'subido', 'upload'];
 
         let selectedAgent: AgentExecutor;
 
-        if (timeKeywords.some(k => lowerCaseInput.includes(k)) || lastAIMessage.includes("time") || lastAIMessage.includes("hora")) {
+        // If the input or last AI message contains any document/file-related keyword, force document_search
+        if (documentKeywords.some(k => lowerCaseInput.includes(k)) || documentKeywords.some(k => lastAIMessage.includes(k))) {
+          this.logger.debug("Routing to Document Agent");
+          selectedAgent = documentAgent;
+        }
+        else if (timeKeywords.some(k => lowerCaseInput.includes(k)) || lastAIMessage.includes("time") || lastAIMessage.includes("hora")) {
           this.logger.debug("Routing to Time Agent");
           selectedAgent = timeAgent;
         } else if (weatherKeywords.some(k => lowerCaseInput.includes(k)) || lastAIMessage.includes("weather") || lastAIMessage.includes("clima")) {
           this.logger.debug("Routing to Weather Agent");
           selectedAgent = weatherAgent;
+        } else if (
+          lowerCaseInput.includes("investiga") ||
+          lowerCaseInput.includes("busca en internet") ||
+          lowerCaseInput.includes("investigación") ||
+          lowerCaseInput.includes("research") ||
+          lowerCaseInput.includes("web_search") ||
+          lowerCaseInput.includes("buscar información") ||
+          lowerCaseInput.includes("averigua") ||
+          lowerCaseInput.includes("encuentra en la web") ||
+          // Company info triggers
+          lowerCaseInput.includes("fundador") ||
+          lowerCaseInput.includes("founder") ||
+          lowerCaseInput.includes("fundadores") ||
+          lowerCaseInput.includes("founders") ||
+          lowerCaseInput.includes("año de fundación") ||
+          lowerCaseInput.includes("año fundación") ||
+          lowerCaseInput.includes("año de creacion") ||
+          lowerCaseInput.includes("año de creación") ||
+          lowerCaseInput.includes("año de inicio") ||
+          lowerCaseInput.includes("fecha de fundación") ||
+          lowerCaseInput.includes("fecha de creacion") ||
+          lowerCaseInput.includes("fecha de creación") ||
+          lowerCaseInput.includes("industry") ||
+          lowerCaseInput.includes("ramo") ||
+          lowerCaseInput.includes("sector") ||
+          lowerCaseInput.includes("actividad principal") ||
+          lowerCaseInput.includes("empresa") ||
+          lowerCaseInput.includes("compañía") ||
+          lowerCaseInput.includes("company")
+        ) {
+          this.logger.debug("Routing to Research Agent");
+          selectedAgent = researchAgent;
         } else {
           this.logger.debug("Routing to General Agent");
           selectedAgent = generalAgent;

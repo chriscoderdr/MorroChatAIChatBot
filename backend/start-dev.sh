@@ -2,8 +2,8 @@
 
 # Create a .env file from example.env if it doesn't exist
 if [ ! -f .env ]; then
-    echo "Creating .env file from example.env..."
-    cp example.env .env
+    echo "Creating .env file from .env.example..."
+    cp .env.example .env
     echo "Please update the .env file with your actual configuration before running the application."
     exit 1
 fi

@@ -16,6 +16,33 @@ A modern, production-ready AI chatbot platform inspired by the natural beauty of
 
 ---
 
+## Domain
+
+
+
+## Test
+
+### Test Questions:
+- How's the weather in Santo Domingo, Dominican Republic (you can replace with any city, country)
+- What time is in Bangkok, Thailand (You can replace with any city, country)
+- When was soluciones gbh founded (you can replace with any company name)
+- Tell me the current time in Santo Domingo, Dominican Republic and compare it with the current time in Buenos Aires, Argentina
+
+### Test cuestions for document
+Upload document in sample-data/sample_data_account_details
+- what is this document about?
+- what details does it have?
+- what is the ach route in the file?
+- what is the bank in the file?
+
+### Test Domain
+set in .env a chat topic like
+`CHAT_DEFAULT_TOPIC="Dominican Food"`
+- Talk me about beisbol (if the topic is not beisbol)
+- Talk me about dominican food
+- How do I cook mangú
+
+
 ## 🚀 Quick Start (with Docker Compose)
 
 1. **Clone the repository:**
