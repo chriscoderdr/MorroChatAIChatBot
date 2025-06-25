@@ -116,12 +116,20 @@ function App() {
   };
 
   const handleRetryUpload = () => {
-    if (fileUpload?.file) {
-      setFileUpload({ ...fileUpload, status: 'retrying', errorMessage: undefined });
-      setTimeout(() => {
-        uploadPdfWithMessage(fileUpload.file!, fileUpload.message || '');
-      }, 800);
-    }
+    if (!fileUpload?.file || fileUpload.status === 'retrying' || fileUpload.status === 'uploading') return;
+    setFileUpload({
+      ...fileUpload,
+      status: 'retrying',
+      errorMessage: undefined,
+      progress: 0,
+    });
+    // Optionally scroll to bottom for UX
+    setTimeout(() => {
+      if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTo({ top: chatContainerRef.current.scrollHeight, behavior: 'smooth' });
+      }
+      uploadPdfWithMessage(fileUpload.file!, fileUpload.message || '');
+    }, 800);
   };
 
   // Load chat history when component mounts
@@ -213,6 +221,7 @@ function App() {
                   status={fileUpload.status}
                   errorMessage={fileUpload.errorMessage}
                   progress={fileUpload.progress}
+                  onRetry={handleRetryUpload}
                 />
               </div>
             )}
