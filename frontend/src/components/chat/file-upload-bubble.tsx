@@ -6,14 +6,27 @@ interface FileUploadBubbleProps {
   status: 'uploading' | 'failed' | 'retrying' | 'success';
   onRetry?: () => void;
   errorMessage?: string;
+  progress?: number;
 }
 
-export const FileUploadBubble: React.FC<FileUploadBubbleProps> = ({ fileName, status, onRetry, errorMessage }) => {
+export const FileUploadBubble: React.FC<FileUploadBubbleProps> = ({ fileName, status, onRetry, errorMessage, progress }) => {
   let statusContent = null;
   let bubbleClasses = 'bg-blue-900/80 border border-blue-700 text-blue-200';
 
   if (status === 'uploading') {
-    statusContent = <span className="ml-2 text-xs text-blue-300 animate-pulse">Uploading...</span>;
+    statusContent = (
+      <>
+        <span className="ml-2 text-xs text-blue-300 animate-pulse">Uploading...</span>
+        {typeof progress === 'number' && (
+          <div className="w-32 h-2 bg-blue-950/40 rounded-full overflow-hidden ml-4">
+            <div
+              className="h-2 bg-blue-400 rounded-full transition-all duration-300"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        )}
+      </>
+    );
   } else if (status === 'failed') {
     bubbleClasses = 'bg-red-900/80 border border-red-700 text-red-200';
     statusContent = (

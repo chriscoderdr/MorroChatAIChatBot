@@ -2,21 +2,19 @@ import React, { useState } from 'react';
 import { FileUpload } from './file-upload';
 
 interface ChatInputProps {
-    onSendMessage: (message: string) => void;
+    onSendMessage: (message: string, file?: File | null) => void;
     isLoading: boolean;
-    onUploadFile: (file: File) => void;
-    isUploading: boolean;
-    uploadError: string | null;
-    onRetryUpload: () => void;
 }
 
-export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, onUploadFile, isUploading, uploadError, onRetryUpload }) => {
+export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
     const [input, setInput] = useState('');
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
     const handleSend = () => {
-        if (input.trim() && !isLoading) {
-            onSendMessage(input.trim());
+        if ((input.trim() || selectedFile) && !isLoading) {
+            onSendMessage(input.trim(), selectedFile);
             setInput('');
+            setSelectedFile(null);
         }
     };
 
@@ -40,14 +38,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading, 
                         disabled={isLoading}
                     />
                     <FileUpload
-                        onUpload={onUploadFile}
-                        isUploading={isUploading}
-                        uploadError={uploadError}
-                        onRetry={onRetryUpload}
+                        onSelect={setSelectedFile}
+                        selectedFile={selectedFile}
+                        onRemove={() => setSelectedFile(null)}
                     />
                     <button
                         onClick={handleSend}
-                        disabled={isLoading || !input.trim()}
+                        disabled={isLoading || (!input.trim() && !selectedFile)}
                         className="p-2 bg-blue-500 rounded-full hover:bg-blue-600 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed ml-2"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-white" viewBox="0 0 20 20" fill="currentColor">

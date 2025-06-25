@@ -24,44 +24,45 @@ function App() {
     fileName: string;
     status: 'uploading' | 'failed' | 'retrying' | 'success' | null;
     errorMessage?: string;
+    progress?: number;
+    file?: File;
+    message?: string;
   } | null>(null);
   const chatMutation = useChatMutation();
   const chatHistoryQuery = useChatHistory();
   const chatContainerRef = useRef<HTMLDivElement>(null);
-  // Simulate file upload (frontend only)
-  const handleUploadFile = (file: File) => {
-    setFileUpload({ fileName: file.name, status: 'uploading' });
-    // Simulate upload delay and random error
-    setTimeout(() => {
-      if (Math.random() < 0.2) {
-        setFileUpload({ fileName: file.name, status: 'failed', errorMessage: 'Network error' });
-      } else {
-        setFileUpload({ fileName: file.name, status: 'success' });
-        // Add a message to the chat for the uploaded file
-        setMessages(prev => [...prev, {
-          text: `[PDF Uploaded] ${file.name}`,
-          isUser: true,
-          messageId: `file-${Date.now()}`
-        }]);
-        setTimeout(() => setFileUpload(null), 1200);
-      }
-    }, 1800);
-  };
 
-  const handleRetryUpload = () => {
-    if (fileUpload?.fileName) {
-      setFileUpload({ fileName: fileUpload.fileName, status: 'retrying' });
-      setTimeout(() => {
-        setFileUpload({ fileName: fileUpload.fileName, status: 'uploading' });
-        setTimeout(() => {
-          setFileUpload({ fileName: fileUpload.fileName, status: 'success' });
+  // Upload simulation with progress
+  const simulateFileUpload = (file: File, message: string) => {
+    setFileUpload({ fileName: file.name, status: 'uploading', progress: 0, file, message });
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += Math.floor(Math.random() * 20) + 10;
+      if (progress >= 100) {
+        clearInterval(interval);
+        // Simulate random error
+        if (Math.random() < 0.2) {
+          setFileUpload({ fileName: file.name, status: 'failed', errorMessage: 'Network error', progress: 100, file, message });
+        } else {
+          setFileUpload({ fileName: file.name, status: 'success', progress: 100, file, message });
           setMessages(prev => [...prev, {
-            text: `[PDF Uploaded] ${fileUpload.fileName}`,
+            text: `${message ? message + ' ' : ''}[PDF Uploaded] ${file.name}`,
             isUser: true,
             messageId: `file-${Date.now()}`
           }]);
           setTimeout(() => setFileUpload(null), 1200);
-        }, 1500);
+        }
+      } else {
+        setFileUpload(prev => prev ? { ...prev, progress, status: 'uploading' } : null);
+      }
+    }, 350);
+  };
+
+  const handleRetryUpload = () => {
+    if (fileUpload?.file) {
+      setFileUpload({ ...fileUpload, status: 'retrying', errorMessage: undefined });
+      setTimeout(() => {
+        simulateFileUpload(fileUpload.file!, fileUpload.message || '');
       }, 800);
     }
   };
@@ -92,30 +93,23 @@ function App() {
     }
   };
 
-  const handleSendMessage = (message: string, isRetry = false) => {
-    // If it's a retry, remove the error message first
-    if (isRetry) {
-      setMessages(prevMessages => prevMessages.filter(msg => !msg.isError));
+  const handleSendMessage = (message: string, file?: File | null) => {
+    // If sending a file, handle upload with progress and feedback
+    if (file) {
+      simulateFileUpload(file, message);
+      return;
     }
-    
-    // Add user message to the chat
+    // Otherwise, send just the message
     const messageId = Date.now().toString();
     setMessages(prevMessages => [...prevMessages, { 
       text: message, 
       isUser: true,
       messageId
     }]);
-
-    // Save the message in case we need to retry
     setLastFailedMessage(message);
-
-    // Send the message to the API
     chatMutation.mutate({ message }, {
       onSuccess: (data) => {
-        // On success, clear the last failed message
         setLastFailedMessage(null);
-        
-        // Add the response to the chat
         setMessages(prevMessages => [...prevMessages, { 
           text: data.reply, 
           isUser: false,
@@ -123,7 +117,6 @@ function App() {
         }]);
       },
       onError: (error) => {
-        // On error, add an error message to the chat
         setMessages(prevMessages => [...prevMessages, { 
           text: `Error: ${error.message}`, 
           isUser: false, 
@@ -168,7 +161,7 @@ function App() {
                     fileName={fileUpload.fileName}
                     status={fileUpload.status}
                     errorMessage={fileUpload.errorMessage}
-                    onRetry={fileUpload.status === 'failed' ? handleRetryUpload : undefined}
+                   progress={fileUpload.progress}
                   />
                 )}
                 {chatMutation.isPending && (
@@ -181,10 +174,6 @@ function App() {
         <ChatInput
           onSendMessage={handleSendMessage}
           isLoading={chatMutation.isPending}
-          onUploadFile={handleUploadFile}
-          isUploading={!!fileUpload && (fileUpload.status === 'uploading' || fileUpload.status === 'retrying')}
-          uploadError={fileUpload && fileUpload.status === 'failed' ? fileUpload.errorMessage || 'Upload failed' : null}
-          onRetryUpload={handleRetryUpload}
         />
       </div>
     </div>
