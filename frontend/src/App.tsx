@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Header } from './components/layout/header';
 import { Sidebar } from './components/layout/side-bar';
+import { useNewChatMutation } from './hooks/useNewChatMutation';
 import { ChatMessage } from './components/chat/chat-message';
 import { ChatInput } from './components/chat/chat-input';
 import { FileUploadBubble } from './components/chat/file-upload-bubble';
@@ -19,6 +20,15 @@ interface IMessage {
 }
 
 function App() {
+  const newChatMutation = useNewChatMutation();
+  // Handler for starting a new chat session
+  const handleNewChat = () => {
+    setMessages([]); // Clear chat history
+    setLastFailedMessage(null);
+    setFileUpload(null);
+    newChatMutation.mutate();
+    // Optionally, reset other state if needed
+  };
   const [messages, setMessages] = useState<IMessage[]>([]);
   const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null);
   const [fileUpload, setFileUpload] = useState<{
@@ -150,7 +160,7 @@ function App() {
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white">
-      <Sidebar />
+      <Sidebar onNewChat={handleNewChat} />
       <div className="flex flex-col flex-1">
         <Header />
         <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-6">

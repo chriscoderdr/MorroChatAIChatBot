@@ -1,30 +1,22 @@
 import React from 'react';
 import { Button } from '../ui/button';
 
-export const Sidebar: React.FC = () => {
-  // Mock data for chat history
-  const chatHistory = [
-    "Exploring the Dominican Republic",
-    "React Best Practices 2025",
-    "History of El Morro de Montecristi",
-    "Tailwind CSS 4 new features",
-  ];
+interface SidebarProps {
+  onNewChat: () => void;
+}
 
+export const Sidebar: React.FC<SidebarProps> = ({ onNewChat }) => {
   return (
     <aside className="w-64 bg-gray-900 p-4 border-r border-gray-800 flex flex-col">
-      <Button variant="primary" className="w-full">+ New Chat</Button>
-      <div className="mt-6">
-        <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Recent</h2>
-        <ul className="mt-2 space-y-2">
-          {chatHistory.map((chat, index) => (
-            <li key={index}>
-              <a href="#" className="block p-2 rounded-md text-sm text-gray-300 hover:bg-gray-700 transition-colors">
-                {chat}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </div>
+      <Button
+        variant="primary"
+        className="w-full py-3 text-lg font-bold bg-gradient-to-r from-blue-500 via-blue-400 to-blue-600 shadow-lg hover:from-blue-600 hover:to-blue-700 focus:ring-2 focus:ring-blue-400 focus:outline-none transition-all duration-200 rounded-xl mb-2 animate-[popIn_0.3s_ease]"
+        onClick={onNewChat}
+        aria-label="Start a new chat session"
+      >
+        <span className="mr-2 text-2xl align-middle">＋</span> New Chat
+      </Button>
+      {/* Recent chats hidden for now */}
     </aside>
   );
 };

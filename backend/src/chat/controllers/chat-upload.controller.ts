@@ -1,3 +1,5 @@
+import { Res, Get } from '@nestjs/common';
+import { ChatService } from '../services/chat.service';
 import { Controller, Post, UploadedFile, UseInterceptors, Body, Req } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 
@@ -13,7 +15,9 @@ export class ChatUploadController {
     private readonly pdfVectorService: PdfVectorService,
     private readonly pdfRetrievalService: PdfRetrievalService,
     private readonly langChainService: LangChainService,
+    private readonly chatService: ChatService,
   ) {}
+
 
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
