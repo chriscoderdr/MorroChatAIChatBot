@@ -46,8 +46,6 @@ export class LangChainService {
       },
     });
 
-    await searchTool.invoke({ query: "What's the weather like?" });
-
     const tools = [searchTool];
 
     const toolNode = new ToolNode(tools);
