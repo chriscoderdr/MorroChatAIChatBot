@@ -37,7 +37,7 @@ export const sendMessage = async (payload: SendMessagePayload): Promise<ChatResp
 
 export const fetchChatHistory = async (): Promise<ChatHistory> => {
   try {
-    const response = await apiClient.get<ChatHistory>('/history');
+    const response = await apiClient.get<ChatHistory>('/chat/history');
     return response.data;
   } catch (error) {
     if (axios.isAxiosError(error)) {

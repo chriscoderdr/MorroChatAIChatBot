@@ -19,6 +19,13 @@ export class ChatSession extends Document {
     timestamp: { type: Date, default: Date.now }
   }])
   messages: ChatMessage[];
+  
+  // Explicitly define timestamp fields that Mongoose adds
+  @Prop({ type: Date })
+  createdAt: Date;
+
+  @Prop({ type: Date })
+  updatedAt: Date;
 }
 
 export const ChatSessionSchema = SchemaFactory.createForClass(ChatSession);

@@ -76,4 +76,28 @@ export class SessionCacheService {
       }
     }
   }
+  
+  /**
+   * Get all sessions for a specific user ID from the cache
+   */
+  getSessionsByUserId(userId: string): ChatSession[] {
+    const sessions: ChatSession[] = [];
+    
+    // Filter cached sessions by userId
+    for (const entry of this.cache.values()) {
+      // Check if session is valid and belongs to the user
+      if (
+        entry.session.userId === userId && 
+        (Date.now() - entry.timestamp <= this.TTL)
+      ) {
+        // Ensure updatedAt exists for sorting purposes
+        if (!(entry.session as any).updatedAt) {
+          (entry.session as any).updatedAt = entry.timestamp;
+        }
+        sessions.push(entry.session);
+      }
+    }
+    
+    return sessions;
+  }
 }

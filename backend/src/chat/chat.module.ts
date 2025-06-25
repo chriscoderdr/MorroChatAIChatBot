@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { HistoryController } from './controllers/history.controller';
 import { LangChainService } from './services/langchain.service';
 import { ChatSession, ChatSessionSchema } from './schemas/chat-session.schema';
 import { ChatSessionRepository } from './repositories/chat-session.repository';
@@ -14,7 +13,7 @@ import { ChatController } from './controllers/chat.controller';
       { name: ChatSession.name, schema: ChatSessionSchema },
     ]),
   ],
-  controllers: [ChatController, HistoryController],
+  controllers: [ChatController],
   providers: [
     LangChainService,
     ChatSessionRepository,

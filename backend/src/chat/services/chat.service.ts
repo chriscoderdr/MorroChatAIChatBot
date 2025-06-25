@@ -38,10 +38,10 @@ export class ChatService {
     return sessionId;
   }
 
-  async invoke(userMessage: string, sessionId: string | null, userId: string): Promise<string> {
+  async invoke(userMessage: string, sessionId: string, userId: string): Promise<string> {
     try {
-      // Get or create session
-      const validSessionId = await this.getOrCreateSession(sessionId, userId);
+      // The sessionId passed here is already validated (from getOrCreateSession)
+      const validSessionId = sessionId;
       
       // Create user message with proper typing
       const userMessageObj: ChatMessage = {
@@ -103,6 +103,7 @@ export class ChatService {
       
       // Save AI response to session history (this uses caching)
       await this.chatSessionRepository.addMessage(validSessionId, aiMessageObj);
+      console.log(`AI response saved to session ${validSessionId}`);
 
       return finalResponseContent;
     } catch (error) {
@@ -113,5 +114,35 @@ export class ChatService {
 
   async getSessionHistory(sessionId: string): Promise<ChatMessage[]> {
     return this.chatSessionRepository.getSessionHistory(sessionId);
+  }
+  
+  /**
+   * Get session history using userId instead of sessionId
+   * This supports the simplified browser-session only approach
+   */
+  async getSessionHistoryByUserId(userId: string): Promise<ChatMessage[]> {
+    // Get the latest session for this user
+    const session = await this.chatSessionRepository.findLatestSessionByUserId(userId);
+    
+    if (!session) {
+      return []; // No session found for this user
+    }
+    
+    return session.messages || [];
+  }
+
+  /**
+   * Process a chat request with automatic session handling
+   * This is the simplified API for frontend use
+   */
+  async processChat(userMessage: string, sessionId: string | null | undefined, userId: string): Promise<{ reply: string }> {
+    // Get or create session (handle undefined as null for backward compatibility)
+    const validSessionId = await this.getOrCreateSession(sessionId || null, userId);
+    
+    // Process the message
+    const reply = await this.invoke(userMessage, validSessionId, userId);
+
+    // Return just the reply - no need to expose sessionId
+    return { reply };
   }
 }

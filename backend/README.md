@@ -1,6 +1,15 @@
 # MorroChat Backend
 
-A NestJS backend for the MorroChat application, a chatbot specialized in Dominican food that uses Google's Gemini API.
+A NestJS backend for the MorroChat application, a chatbot specialized in Dom### Chat API
+
+- `POST /chat` - Send a message to the chatbot
+  - Sessions are automatically managed using the browser's session ID
+  - No separate chat session management needed
+  - The backend handles all session tracking transparently
+  - Returns just the AI response with no implementation details exposed
+
+- `GET /chat/history` - Retrieve chat history for the current user
+- `GET /history` - Alternative endpoint to retrieve chat historyd that uses Google's Gemini API.
 
 ## Technologies
 
@@ -92,6 +101,36 @@ API documentation is available at `/api/docs` when the application is running.
 - Rate limiting to prevent abuse
 - Error handling and logging
 - Swagger API documentation
+
+## API Endpoints
+
+### Chat API
+
+- `POST /chat` - Send a message to the chatbot
+  - Sessions are automatically managed through cookies
+  - No need for the frontend to track or pass session IDs
+  - The session is created automatically on first request
+  - Returns the AI response (the sessionId is returned but frontend doesn't need to use it)
+
+- `GET /chat/history` - Retrieve chat history for the current session (using cookie)
+- `GET /history` - Alternative endpoint to retrieve chat history for the current session
+
+### Request Example
+
+```json
+// POST /chat
+{
+  "message": "Tell me about mangú"
+}
+```
+
+### Response Example
+
+```json
+{
+  "reply": "Mangú is a traditional Dominican breakfast dish made from boiled and mashed plantains..."
+}
+```
 
 ## License
 

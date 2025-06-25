@@ -113,4 +113,34 @@ export class ChatSessionRepository {
     
     return session?.messages || [];
   }
+
+  /**
+   * Find the most recent session for a given userId
+   */
+  async findLatestSessionByUserId(userId: string): Promise<ChatSession | null> {
+    // First check if there are any sessions for this user in the cache
+    const cachedSessions = this.sessionCacheService.getSessionsByUserId(userId);
+    if (cachedSessions && cachedSessions.length > 0) {
+      // Sort by updatedAt using type-safe access
+      return cachedSessions.sort((a, b) => {
+        // Use type assertion since we know these fields exist at runtime thanks to Mongoose
+        const bDate = (b as any).updatedAt || new Date(0);
+        const aDate = (a as any).updatedAt || new Date(0);
+        return bDate.getTime() - aDate.getTime();
+      })[0];
+    }
+    
+    // If not in cache, query the database
+    const session = await this.chatSessionModel
+      .findOne({ userId })
+      .sort({ updatedAt: -1 })
+      .exec();
+    
+    // Cache the session if found
+    if (session) {
+      this.sessionCacheService.setSession(session.sessionId, session);
+    }
+    
+    return session;
+  }
 }

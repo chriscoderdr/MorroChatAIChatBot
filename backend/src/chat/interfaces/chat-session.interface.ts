@@ -11,6 +11,7 @@ export interface ChatSession extends Document {
   userId: string;
   topic?: string;
   messages: ChatMessage[];
-  createdAt: Date;
-  updatedAt: Date;
+  // Mongoose timestamp fields (added by { timestamps: true })
+  readonly createdAt?: Date;
+  readonly updatedAt?: Date;
 }
