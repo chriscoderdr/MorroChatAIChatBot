@@ -1,0 +1,45 @@
+version: '3.9'
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: morrochat-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example
+      MONGO_INITDB_DATABASE: morrochat
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: morrochat-backend
+    restart: unless-stopped
+    environment:
+      MONGODB_URI: mongodb://root:example@mongo:27017/morrochat?authSource=admin
+      NODE_ENV: production
+    depends_on:
+      - mongo
+    ports:
+      - '3000:3000'
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: morrochat-frontend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+    ports:
+      - '5173:80'
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:

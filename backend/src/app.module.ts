@@ -21,7 +21,7 @@ import { BrowserSessionMiddleware } from './common/middlewares/browser-session.m
     }),
     MongooseModule.forRootAsync({
       useFactory: () => ({
-        uri: process.env.MONGO_URI || 'mongodb://localhost:27017/morro_chat',
+        uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/morro_chat',
         // Connection pool settings
         connectionFactory: (connection) => {
           connection.on('connected', () => {
