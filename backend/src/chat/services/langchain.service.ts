@@ -15,7 +15,7 @@ import { Logger } from "@nestjs/common";
 export class LangChainService {
   private readonly logger = new Logger(LangChainService.name);
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: ConfigService) { }
 
   async createLangChainApp(topic?: string) {
     const apiKey = this.configService.get<string>('openai.apiKey');
@@ -88,62 +88,24 @@ export class LangChainService {
     };
 
     const firstModel = async (state: typeof AgentState.State) => {
-      // Extract content from the last message (which is expected to be a HumanMessage from user input)
-      const lastHumanMessageContent = state.messages[state.messages.length - 1].content;
-      let humanInputString: string = "";        if (typeof lastHumanMessageContent === 'string') {
-            humanInputString = lastHumanMessageContent;
-        } else if (Array.isArray(lastHumanMessageContent)) {
-            // If content is an array, concatenate text parts.
-            humanInputString = lastHumanMessageContent
-                .map(part => {
-                    if (typeof part === 'object' && 'text' in part) {
-                        return part.text;
-                    }
-                    return '';
-                })
-                .join('');
-        }
-
-        // Check if we have a conversation history
-        const conversationHistory = state.messages.length > 1 
-            ? state.messages.slice(0, -1) // All messages except the latest user message
-            : [];
-        
-        let messagesForModel: BaseMessage[] = [...conversationHistory]; // Start with conversation history
-
-        // Add system message at the beginning for consistent context
-        if (topic) {
-            const systemPrompt = new SystemMessage(
-                `You are an expert in ${topic}. Your primary goal is to answer questions related to ${topic}. ` +
-                `If a question is clearly outside the domain of ${topic}, you must politely decline to answer or redirect the user back to your area of expertise. ` +
-                `Do not answer questions that are off-topic. Only use the 'search' tool for information directly related to ${topic}. ` +
-                `Maintain context from the conversation history when responding.`
-            );
-            
-            // Insert system message at the beginning if we have a history,
-            // or just add it as the first message if we don't
-            if (messagesForModel.length > 0) {
-                messagesForModel.unshift(systemPrompt);
-            } else {
-                messagesForModel.push(systemPrompt);
-            }
-        }
-
-      messagesForModel.push(new HumanMessage(humanInputString));
-
-      let response: AIMessageChunk | undefined;
-      for await (const message of await boundModel.stream(messagesForModel)) {
-        if (!response) {
-          response = message;
-        } else {
-          response = concat(response, message);
-        }
-      }
-
+      const humanInput = state.messages[state.messages.length - 1].content || "";
       return {
-        messages: response ? [response as AIMessage] : [],
-      };
-    };
+        messages: [
+          new AIMessage({
+            content: "",
+            tool_calls: [
+              {
+                name: "search",
+                args: {
+                  query: humanInput,
+                },
+                id: "search-1"
+              }
+            ]
+          })
+        ]
+      }
+    }
 
     const workflow = new StateGraph(AgentState)
       .addNode("first_agent", firstModel)

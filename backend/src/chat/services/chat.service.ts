@@ -9,14 +9,14 @@ import { ConfigService } from '@nestjs/config';
 @Injectable()
 export class ChatService {
   private readonly logger = new Logger(ChatService.name);
-  private defaultTopic: string;
+  private defaultTopic: string | undefined;
 
   constructor(
     private readonly langChainService: LangChainService, 
     private readonly chatSessionRepository: ChatSessionRepository,
     private readonly configService: ConfigService,
   ) {
-    this.defaultTopic = this.configService.get<string>('CHAT_DEFAULT_TOPIC') || 'Dominican Food';
+    this.defaultTopic = this.configService.get<string>('CHAT_DEFAULT_TOPIC') || undefined;
   }
 
   async createSession(userId: string): Promise<string> {
