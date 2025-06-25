@@ -47,6 +47,19 @@ function App() {
   // Real upload to backend with progress using react-query
   const uploadPdfWithMessage = (file: File, message: string) => {
     setFileUpload({ fileName: file.name, status: 'uploading', progress: 0, file, message });
+    // If there are no messages and no message text, add a placeholder so the welcome screen disappears
+    setMessages(prev => {
+      if (prev.length === 0 && !message) {
+        return [
+          {
+            text: `[PDF Uploaded] ${file.name}`,
+            isUser: true,
+            messageId: `file-${Date.now()}`
+          }
+        ];
+      }
+      return prev;
+    });
     const minDisplayTime = 800; // ms
     const uploadStart = Date.now();
     uploadPdfMutation.mutate({
@@ -62,11 +75,14 @@ function App() {
           setFileUpload({ fileName: file.name, status: 'success', progress: 100, file, message });
           setMessages(prev => [
             ...prev,
-            {
-              text: `${message ? message + ' ' : ''}[PDF Uploaded] ${file.name}`,
-              isUser: true,
-              messageId: `file-${Date.now()}`
-            },
+            // Only add the message if it wasn't already added above
+            ...((prev.length === 0 || (prev.length === 1 && prev[0].text.startsWith('[PDF Uploaded]'))) && !message
+              ? []
+              : [{
+                  text: `${message ? message + ' ' : ''}[PDF Uploaded] ${file.name}`,
+                  isUser: true,
+                  messageId: `file-${Date.now()}`
+                }]),
             ...(
               data.answer
                 ? [{
@@ -188,7 +204,20 @@ function App() {
               ) : (
                 <EmptyState onSuggestionClick={handleSendMessage} />
               )
-            ) : (
+            ) : null}
+            {/* Always show file upload bubble if uploading or feedback is needed */}
+            {fileUpload && fileUpload.status && (
+              <div className="space-y-6">
+                <FileUploadBubble
+                  fileName={fileUpload.fileName}
+                  status={fileUpload.status}
+                  errorMessage={fileUpload.errorMessage}
+                  progress={fileUpload.progress}
+                />
+              </div>
+            )}
+            {/* Show chat messages if any */}
+            {messages.length > 0 && (
               <div className="space-y-6">
                 {messages.map((msg, index) => (
                   <ChatMessage 
@@ -197,14 +226,6 @@ function App() {
                     onRetry={msg.isError ? handleRetry : undefined}
                   />
                 ))}
-                {fileUpload && fileUpload.status && (
-                  <FileUploadBubble
-                    fileName={fileUpload.fileName}
-                    status={fileUpload.status}
-                    errorMessage={fileUpload.errorMessage}
-                    progress={fileUpload.progress}
-                  />
-                )}
                 {(chatMutation.isPending || uploadPdfMutation.isPending) && (
                   <ChatMessage message={{ text: '', isUser: false }} />
                 )}
