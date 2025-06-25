@@ -2,8 +2,12 @@ import type { AxiosProgressEvent } from 'axios';
 import type { ChatHistory, ChatMessage } from '../models/chatMessage';
 import axios from 'axios';
 export interface UploadPdfResponse {
-  message?: string;
-  fileName?: string;
+  filename: string;
+  mimetype: string;
+  size: number;
+  message: string;
+  status: string;
+  answer?: string;
 }
 
 

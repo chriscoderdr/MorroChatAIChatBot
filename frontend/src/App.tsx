@@ -60,11 +60,23 @@ function App() {
         const elapsed = Date.now() - uploadStart;
         const showSuccess = () => {
           setFileUpload({ fileName: file.name, status: 'success', progress: 100, file, message });
-          setMessages(prev => [...prev, {
-            text: `${message ? message + ' ' : ''}[PDF Uploaded] ${file.name}`,
-            isUser: true,
-            messageId: `file-${Date.now()}`
-          }]);
+          setMessages(prev => [
+            ...prev,
+            {
+              text: `${message ? message + ' ' : ''}[PDF Uploaded] ${file.name}`,
+              isUser: true,
+              messageId: `file-${Date.now()}`
+            },
+            ...(
+              data.answer
+                ? [{
+                    text: data.answer,
+                    isUser: false,
+                    messageId: `answer-${Date.now()}`
+                  }]
+                : []
+            )
+          ]);
           setTimeout(() => setFileUpload(null), 1200);
         };
         if (elapsed < minDisplayTime) {
