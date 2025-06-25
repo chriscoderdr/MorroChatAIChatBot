@@ -8,11 +8,26 @@ if [ ! -f .env ]; then
     exit 1
 fi
 
-# Check if GEMINI_API_KEY exists in .env file
-if ! grep -q "GEMINI_API_KEY=" .env || grep -q "GEMINI_API_KEY=$" .env || grep -q "GEMINI_API_KEY=your_gemini_api_key" .env; then
-    echo "Error: GEMINI_API_KEY is not properly set in your .env file."
-    echo "Please update the .env file with your actual API key and try again."
-    exit 1
+# Get the AI provider from .env
+AI_PROVIDER=$(grep "AI_PROVIDER=" .env | cut -d= -f2)
+AI_PROVIDER=${AI_PROVIDER:-gemini}  # Default to gemini if not specified
+
+# Check API keys based on the provider
+if [ "$AI_PROVIDER" = "gemini" ]; then
+    if ! grep -q "GEMINI_API_KEY=" .env || grep -q "GEMINI_API_KEY=$" .env || grep -q "GEMINI_API_KEY=your_gemini_api_key" .env; then
+        echo "Error: GEMINI_API_KEY is not properly set in your .env file."
+        echo "Please update the .env file with your actual Gemini API key and try again."
+        exit 1
+    fi
+elif [ "$AI_PROVIDER" = "openai" ]; then
+    if ! grep -q "OPENAI_API_KEY=" .env || grep -q "OPENAI_API_KEY=$" .env || grep -q "OPENAI_API_KEY=your_openai_api_key" .env; then
+        echo "Error: OPENAI_API_KEY is not properly set in your .env file."
+        echo "Please update the .env file with your actual OpenAI API key and try again."
+        exit 1
+    fi
+else
+    echo "Warning: Unknown AI_PROVIDER value: $AI_PROVIDER"
+    echo "Supported providers are 'gemini' and 'openai'. Please check your .env file."
 fi
 
 # Install dependencies if node_modules doesn't exist

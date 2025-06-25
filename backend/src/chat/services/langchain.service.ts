@@ -2,8 +2,10 @@ import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
+import { ChatOpenAI } from "@langchain/openai";
+import { Annotation, END, MemorySaver, START, StateGraph } from "@langchain/langgraph";
 import { AIMessage, AIMessageChunk, BaseMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { RunnableConfig } from "@langchain/core/runnables";
 import { concat } from "@langchain/core/utils/stream";
 import { TavilySearch } from "@langchain/tavily";
@@ -18,14 +20,30 @@ export class LangChainService {
   constructor(private readonly configService: ConfigService) { }
 
   async createLangChainApp(topic?: string) {
-    const apiKey = this.configService.get<string>('openai.apiKey');
-    const model = new ChatGoogleGenerativeAI({
-      apiKey,
-      model: this.configService.get<string>('openai.model') || 'gemini-1.5-flash',
-      temperature: this.configService.get<number>('openai.temperature') || 0,
-      // Set a higher token limit to accommodate conversation history
-      maxOutputTokens: 1024,
-    });
+    const provider = this.configService.get<string>('ai.provider') || 'gemini';
+    let model: BaseChatModel;
+    
+    if (provider === 'openai') {
+      const apiKey = process.env.OPENAI_API_KEY;
+      model = new ChatOpenAI({
+        apiKey,
+        modelName: process.env.OPENAI_MODEL || 'gpt-4o',
+        temperature: parseFloat(process.env.OPENAI_TEMPERATURE || '0'),
+        maxTokens: 1024,
+      });
+    } else {
+      // Default to Gemini
+      const apiKey = process.env.GEMINI_API_KEY;
+      model = new ChatGoogleGenerativeAI({
+        apiKey,
+        model: process.env.GEMINI_MODEL || 'gemini-1.5-flash',
+        temperature: parseFloat(process.env.GEMINI_TEMPERATURE || '0'),
+        // Set a higher token limit to accommodate conversation history
+        maxOutputTokens: 1024,
+      });
+    }
+    
+    this.logger.log(`Using AI provider: ${provider}`);
 
     const searchTool = new DynamicStructuredTool({
       name: "search",
@@ -50,7 +68,8 @@ export class LangChainService {
 
     const toolNode = new ToolNode(tools);
 
-    const boundModel = model.bindTools(tools);
+    // Both ChatOpenAI and ChatGoogleGenerativeAI support bindTools
+    const boundModel = model.bindTools ? model.bindTools(tools) : model;
 
     const AgentState = Annotation.Root({
       messages: Annotation<BaseMessage[]>({
