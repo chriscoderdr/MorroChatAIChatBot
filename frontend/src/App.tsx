@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Header } from './components/layout/header';
 import { Sidebar } from './components/layout/side-bar';
 import { useNewChatMutation } from './hooks/useNewChatMutation';
