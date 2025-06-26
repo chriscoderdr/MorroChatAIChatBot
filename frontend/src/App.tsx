@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Header } from './components/layout/header';
 import { Sidebar } from './components/layout/side-bar';
 import { useNewChatMutation } from './hooks/useNewChatMutation';
@@ -43,6 +43,7 @@ function App() {
   const chatMutation = useChatMutation();
   const chatHistoryQuery = useChatHistory();
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const lastMessageRef = useRef<HTMLDivElement>(null);
 
   // Real upload to backend with progress using react-query
   const uploadPdfWithMessage = (file: File, message: string) => {
@@ -145,9 +146,11 @@ function App() {
     }
   }, [chatHistoryQuery.data]);
 
+
+  // Scroll to the last message when messages change
   useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+    if (lastMessageRef.current) {
+      lastMessageRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, [messages, chatMutation.isPending]);
 
@@ -197,8 +200,8 @@ function App() {
       <Sidebar onNewChat={handleNewChat} />
       <div className="flex flex-col flex-1">
         <Header />
-        <main ref={chatContainerRef} className="flex-1 p-0 sm:p-6 flex flex-col min-h-0 overflow-y-auto">
-          <div className={messages.length === 0 ? 'flex-1 w-full min-h-0 flex flex-col' : 'max-w-4xl mx-auto w-full flex flex-col'}>
+        <main ref={chatContainerRef} className="flex-1 p-0 sm:p-6 flex flex-col min-h-0">
+          <div className={messages.length === 0 ? 'flex-1 w-full min-h-0 flex flex-col overflow-y-auto' : 'max-w-4xl mx-auto w-full flex flex-col flex-1 min-h-0 overflow-y-auto'}>
             {/* Show empty state or history loading/error if no messages */}
             {messages.length === 0 ? (
               chatHistoryQuery.isLoading ? (
@@ -219,15 +222,21 @@ function App() {
             {/* Show chat messages if any */}
             {messages.length > 0 && (
               <div className="space-y-6 pb-[env(safe-area-inset-bottom)] pb-24">
-                {messages.map((msg, index) => (
-                  <ChatMessage
-                    key={msg.messageId || index}
-                    message={msg}
-                    onRetry={msg.isError ? handleRetry : undefined}
-                  />
-                ))}
+                {messages.map((msg, index) => {
+                  const isLast = index === messages.length - 1;
+                  return (
+                    <div key={msg.messageId || index} ref={isLast ? lastMessageRef : undefined}>
+                      <ChatMessage
+                        message={msg}
+                        onRetry={msg.isError ? handleRetry : undefined}
+                      />
+                    </div>
+                  );
+                })}
                 {(chatMutation.isPending || uploadPdfMutation.isPending) && (
-                  <ChatMessage message={{ text: '', isUser: false }} />
+                  <div ref={lastMessageRef}>
+                    <ChatMessage message={{ text: '', isUser: false }} />
+                  </div>
                 )}
               </div>
             )}
