@@ -197,8 +197,8 @@ function App() {
       <Sidebar onNewChat={handleNewChat} />
       <div className="flex flex-col flex-1">
         <Header />
-        <main ref={chatContainerRef} className="flex-1 p-0 sm:p-6 flex flex-col min-h-0">
-          <div className={messages.length === 0 ? 'flex-1 w-full overflow-y-auto min-h-0 flex flex-col' : 'max-w-4xl mx-auto w-full flex flex-col'}>
+        <main ref={chatContainerRef} className="flex-1 p-0 sm:p-6 flex flex-col min-h-0 overflow-y-auto">
+          <div className={messages.length === 0 ? 'flex-1 w-full min-h-0 flex flex-col' : 'max-w-4xl mx-auto w-full flex flex-col'}>
             {/* Show empty state or history loading/error if no messages */}
             {messages.length === 0 ? (
               chatHistoryQuery.isLoading ? (
@@ -218,7 +218,7 @@ function App() {
             ) : null}
             {/* Show chat messages if any */}
             {messages.length > 0 && (
-              <div className="space-y-6">
+              <div className="space-y-6 pb-[env(safe-area-inset-bottom)] pb-24">
                 {messages.map((msg, index) => (
                   <ChatMessage
                     key={msg.messageId || index}
