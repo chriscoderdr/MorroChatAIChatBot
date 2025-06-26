@@ -1,0 +1,26 @@
+
+
+
+html, body, #root {
+  height: 100svh;
+  min-height: 100svh;
+  width: 100vw;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+  background: color-mix(in oklab, var(--color-gray-900) 80%, transparent);
+}
+
+#root {
+  height: 100svh;
+  min-height: 100svh;
+  width: 100vw;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--color-gray-900) 80%, transparent);
+  overscroll-behavior: none;
+  touch-action: none;
+}
+

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, forwardRef } from 'react';
 import { FileUpload } from './file-upload';
 
 interface ChatInputProps {
@@ -6,7 +6,7 @@ interface ChatInputProps {
     isLoading: boolean;
 }
 
-export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }) => {
+export const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({ onSendMessage, isLoading }, ref) => {
     const [input, setInput] = useState('');
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
@@ -19,13 +19,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }
     };
 
     const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-        if (event.key === 'Enter') {
+        if (event.key === 'Enter' && (input.trim() || selectedFile)) {
+            event.preventDefault();
             handleSend();
         }
     };
 
     return (
         <div
+            ref={ref}
             className="p-2 sm:p-4 bg-gray-900/80 backdrop-blur-sm border-t border-gray-700 sticky bottom-0 left-0 right-0 z-50"
             style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
         >
@@ -64,4 +66,5 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, isLoading }
             </p>
         </div>
     );
-};
+});
+ChatInput.displayName = 'ChatInput';

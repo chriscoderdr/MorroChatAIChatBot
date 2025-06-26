@@ -192,24 +192,18 @@ function App() {
     });
   };
 
-  const fileUploadBubbleVisible = !!(fileUpload && fileUpload.status);
-
   return (
-    <div className="flex flex-col md:flex-row min-h-screen h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white">
+    <div className="flex h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white">
       <Sidebar onNewChat={handleNewChat} />
-      <div className="flex flex-col flex-1 min-w-0">
+      <div className="flex flex-col flex-1">
         <Header />
-        <main
-          ref={chatContainerRef}
-          className={`flex-1 overflow-y-auto p-2 sm:p-4 md:p-6 transition-all duration-300 ${fileUploadBubbleVisible ? 'pb-[120px] sm:pb-[140px]' : 'pb-[env(safe-area-inset-bottom)]'}`}
-          style={{ minHeight: '0', height: '100%', boxSizing: 'border-box' }}
-        >
-          <div className="max-w-4xl mx-auto w-full min-h-[60vh] flex flex-col justify-end">
+        <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-4xl mx-auto">
             {/* Show empty state or history loading/error if no messages */}
             {messages.length === 0 ? (
               chatHistoryQuery.isLoading ? (
-                <div className="flex justify-center items-center h-40 sm:h-64">
-                  <div className="animate-spin rounded-full h-8 w-8 sm:h-12 sm:w-12 border-t-2 border-b-2 border-blue-500"></div>
+                <div className="flex justify-center items-center h-64">
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
                 </div>
               ) : chatHistoryQuery.isError ? (
                 <ChatHistoryError 
@@ -222,7 +216,7 @@ function App() {
             ) : null}
             {/* Show chat messages if any */}
             {messages.length > 0 && (
-              <div className="space-y-4 sm:space-y-6">
+              <div className="space-y-6">
                 {messages.map((msg, index) => (
                   <ChatMessage
                     key={msg.messageId || index}
@@ -237,27 +231,22 @@ function App() {
             )}
           </div>
         </main>
-        {/* Sticky file upload bubble above the input */}
-        {fileUploadBubbleVisible && fileUpload && fileUpload.status && (
-          <div className="fixed left-0 right-0 z-30 flex justify-center pointer-events-none" style={{ bottom: '72px', paddingBottom: 'env(safe-area-inset-bottom)' }}>
-            <div className="w-full max-w-4xl px-2 sm:px-6 pointer-events-auto">
-              <FileUploadBubble
-                fileName={fileUpload.fileName}
-                status={fileUpload.status as 'uploading' | 'failed' | 'retrying' | 'success'}
-                errorMessage={fileUpload.errorMessage}
-                progress={fileUpload.progress}
-                onRetry={handleRetryUpload}
-              />
-            </div>
+        {/* Always show file upload bubble if uploading or feedback is needed */}
+        {fileUpload && fileUpload.status && (
+          <div className="px-6 pb-2 max-w-4xl mx-auto w-full">
+            <FileUploadBubble
+              fileName={fileUpload.fileName}
+              status={fileUpload.status}
+              errorMessage={fileUpload.errorMessage}
+              progress={fileUpload.progress}
+              onRetry={handleRetryUpload}
+            />
           </div>
         )}
-        {/* Sticky input at the bottom, always above safe area/tab bar */}
-        <div className="sticky bottom-0 left-0 right-0 z-40 bg-gray-900/80 backdrop-blur-sm border-t border-gray-700" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-          <ChatInput
-            onSendMessage={handleSendMessage}
-            isLoading={chatMutation.isPending || uploadPdfMutation.isPending}
-          />
-        </div>
+        <ChatInput
+          onSendMessage={handleSendMessage}
+          isLoading={chatMutation.isPending || uploadPdfMutation.isPending}
+        />
       </div>
     </div>
   );
