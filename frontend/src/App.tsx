@@ -207,7 +207,17 @@ function App() {
         <div
           className="sticky top-0 z-20 bg-gradient-to-br from-gray-900 to-gray-800"
         >
-          <Header />
+          <div className="flex items-center justify-between px-4 py-2">
+            <Header />
+            {/* Mobile New Chat button, hidden on sm and up */}
+            <button
+              className="sm:hidden ml-2 px-3 py-1 rounded bg-blue-600 text-white font-semibold text-sm shadow hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400"
+              onClick={handleNewChat}
+              aria-label="Start new chat"
+            >
+              New Chat
+            </button>
+          </div>
         </div>
         <main ref={chatContainerRef} className="flex-1 p-0 flex flex-col min-h-0">
           <div className={messages.length === 0 ? 'flex-1 w-full flex flex-col min-h-0' : 'max-w-4xl mx-auto w-full flex flex-col flex-1 min-h-0'}>
@@ -237,7 +247,7 @@ function App() {
                   }
                 `}</style>
                 <div
-                  className="chat-scroll-area flex flex-col overflow-y-auto gap-y-3 mt-4"
+                  className="chat-scroll-area flex flex-col overflow-y-auto gap-y-3 pt-4"
                   style={{
                     paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
                     flex: 1,
