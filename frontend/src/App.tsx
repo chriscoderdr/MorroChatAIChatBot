@@ -196,12 +196,21 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white">
+    <div
+      className="flex h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white"
+      style={{
+        '--header-height': 'clamp(4.5rem, 7vw, 4.5rem)'
+      } as React.CSSProperties}
+    >
       <Sidebar onNewChat={handleNewChat} />
       <div className="flex flex-col flex-1">
-        <Header />
-        <main ref={chatContainerRef} className="flex-1 p-0 sm:p-6 flex flex-col min-h-0">
-          <div className={messages.length === 0 ? 'flex-1 w-full min-h-0 flex flex-col overflow-y-auto' : 'max-w-4xl mx-auto w-full flex flex-col flex-1 min-h-0 overflow-y-auto'}>
+        <div
+          className="sticky top-0 z-20 bg-gradient-to-br from-gray-900 to-gray-800"
+        >
+          <Header />
+        </div>
+        <main ref={chatContainerRef} className="flex-1 p-0 flex flex-col min-h-0">
+          <div className={messages.length === 0 ? 'flex-1 w-full flex flex-col min-h-0' : 'max-w-4xl mx-auto w-full flex flex-col flex-1 min-h-0'}>
             {/* Show empty state or history loading/error if no messages */}
             {messages.length === 0 ? (
               chatHistoryQuery.isLoading ? (
@@ -221,24 +230,38 @@ function App() {
             ) : null}
             {/* Show chat messages if any */}
             {messages.length > 0 && (
-              <div className="space-y-6 pb-[env(safe-area-inset-bottom)] pb-24">
-                {messages.map((msg, index) => {
-                  const isLast = index === messages.length - 1;
-                  return (
-                    <div key={msg.messageId || index} ref={isLast ? lastMessageRef : undefined}>
-                      <ChatMessage
-                        message={msg}
-                        onRetry={msg.isError ? handleRetry : undefined}
-                      />
+              <>
+                <style>{`
+                  @media (max-width: 640px) {
+                    .chat-scroll-area { padding-top: var(--header-height, 3.5rem) !important; }
+                  }
+                `}</style>
+                <div
+                  className="chat-scroll-area flex flex-col overflow-y-auto gap-y-3 mt-4"
+                  style={{
+                    paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
+                    flex: 1,
+                    minHeight: 0
+                  }}
+                >
+                  {messages.map((msg, index) => {
+                    const isLast = index === messages.length - 1;
+                    return (
+                      <div key={msg.messageId || index} ref={isLast ? lastMessageRef : undefined}>
+                        <ChatMessage
+                          message={msg}
+                          onRetry={msg.isError ? handleRetry : undefined}
+                        />
+                      </div>
+                    );
+                  })}
+                  {(chatMutation.isPending || uploadPdfMutation.isPending) && (
+                    <div ref={lastMessageRef}>
+                      <ChatMessage message={{ text: '', isUser: false }} />
                     </div>
-                  );
-                })}
-                {(chatMutation.isPending || uploadPdfMutation.isPending) && (
-                  <div ref={lastMessageRef}>
-                    <ChatMessage message={{ text: '', isUser: false }} />
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              </>
             )}
           </div>
         </main>
