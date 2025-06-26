@@ -197,12 +197,12 @@ function App() {
       <Sidebar onNewChat={handleNewChat} />
       <div className="flex flex-col flex-1">
         <Header />
-        <main ref={chatContainerRef} className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-4xl mx-auto">
+        <main ref={chatContainerRef} className="flex-1 p-0 sm:p-6 flex flex-col min-h-0">
+          <div className={messages.length === 0 ? 'flex-1 w-full overflow-y-auto min-h-0 flex flex-col' : 'max-w-4xl mx-auto w-full flex flex-col'}>
             {/* Show empty state or history loading/error if no messages */}
             {messages.length === 0 ? (
               chatHistoryQuery.isLoading ? (
-                <div className="flex justify-center items-center h-64">
+                <div className="flex justify-center items-center h-64 w-full">
                   <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
                 </div>
               ) : chatHistoryQuery.isError ? (
@@ -211,7 +211,9 @@ function App() {
                   onRetry={() => chatHistoryQuery.refetch()} 
                 />
               ) : (
-                <EmptyState onSuggestionClick={handleSendMessage} />
+                <div className="flex-1 flex flex-col min-h-0 w-full overflow-y-auto">
+                  <EmptyState onSuggestionClick={handleSendMessage} />
+                </div>
               )
             ) : null}
             {/* Show chat messages if any */}

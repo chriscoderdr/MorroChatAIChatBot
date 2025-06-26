@@ -20,7 +20,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({ onSuggestionClick }) => 
   };
 
   return (
-    <div className="flex flex-col items-center justify-center h-full text-center p-8">
+    <div className="flex flex-col items-center flex-1 min-h-0 text-center p-4 sm:p-8 w-full overflow-y-auto">
        <div className="w-24 h-24 mb-6 rounded-full bg-gradient-to-br from-purple-600 to-blue-500 p-2 flex items-center justify-center">
             <img src={MorroLogo} alt="MorroChat Large Logo" className="w-16 h-16"/>
         </div>
