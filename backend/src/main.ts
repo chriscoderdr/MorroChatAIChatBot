@@ -1,14 +1,15 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
-import { ValidationPipe, Logger } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
+import { LogstashLogger } from './logging/logstash-logger';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import * as cookieParser from 'cookie-parser';
 
 async function bootstrap() {
-  const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule);
+  const logstashLogger = new LogstashLogger('logstash', 5000);
+  const app = await NestFactory.create(AppModule, { logger: logstashLogger });
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('app.port') || 3000;

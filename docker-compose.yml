@@ -43,6 +43,18 @@ services:
     ports:
       - '3000:3000'
 
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.13.4
+    container_name: morrochat-logstash
+    restart: unless-stopped
+    volumes:
+      - ./backend/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+    ports:
+      - "5044:5044"
+      - "5000:5000"
+    depends_on:
+      - backend
+
   frontend:
     build:
       context: ./frontend
