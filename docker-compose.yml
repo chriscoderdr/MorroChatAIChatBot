@@ -64,6 +64,7 @@ services:
       - xpack.security.enabled=true
       - ES_JAVA_OPTS=-Xms512m -Xmx512m
       - xpack.security.enrollment.enabled=true
+      - ES_XPACK_SECURITY_ENROLLMENT_ENABLED=true
     ports:
       - "9200:9200"
     volumes:
@@ -77,6 +78,7 @@ services:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
       - xpack.security.enabled=true
       - xpack.security.enrollment.enabled=true
+      - ES_XPACK_SECURITY_ENROLLMENT_ENABLED=true
     ports:
       - "5601:5601"
     depends_on:
