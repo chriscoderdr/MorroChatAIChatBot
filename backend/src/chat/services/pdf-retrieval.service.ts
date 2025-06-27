@@ -4,7 +4,6 @@ import { ChromaService } from './chroma.service';
 
 @Injectable()
 export class PdfRetrievalService {
-  private readonly logger = new Logger(PdfRetrievalService.name);
   private chroma;
 
   constructor(private readonly chromaService: ChromaService) {
