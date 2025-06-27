@@ -1,28 +1,18 @@
 import type { AxiosProgressEvent } from 'axios';
 import type { ChatHistory, ChatMessage } from '../models/chatMessage';
 import axios from 'axios';
-export interface UploadPdfResponse {
-  filename: string;
-  mimetype: string;
-  size: number;
-  message: string;
-  status: string;
-  answer?: string;
-}
+import type { UploadPdfResponse } from '../dtos/upload-pdf-response-dto';
+import type { NewChatResponse } from '../dtos/new-chat-response-dto';
+import type { SendMessagePayload } from '../dtos/send-message-payload-dto';
+import type { ChatResponse } from '../dtos/chat-response-dto';
 
-
-
-export interface NewChatResponse {
-  message?: string;
-}
-
-export interface SendMessagePayload {
-  message: string;
-}
-
-export interface ChatResponse {
-  reply: string;
-}
+export const apiClient = axios.create({
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  withCredentials: true, // This enables sending cookies with cross-origin requests
+});
 
 export const uploadPdfWithMessageApi = async (
   file: File,
@@ -47,15 +37,6 @@ export const uploadPdfWithMessageApi = async (
 };
 
 
-
-export const apiClient = axios.create({
-  baseURL: 'http://localhost:3000',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  withCredentials: true, // This enables sending cookies with cross-origin requests
-});
-
 export const startNewChat = async (): Promise<NewChatResponse> => {
   try {
     const response = await apiClient.post<NewChatResponse>('/chat/new');
@@ -67,8 +48,6 @@ export const startNewChat = async (): Promise<NewChatResponse> => {
     throw new Error('Failed to start new chat session');
   }
 };
-
-
 
 export const sendMessage = async (payload: SendMessagePayload): Promise<ChatResponse> => {
   try {

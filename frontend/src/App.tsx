@@ -80,17 +80,17 @@ function App() {
             ...((prev.length === 0 || (prev.length === 1 && prev[0].text.startsWith('[PDF Uploaded]'))) && !message
               ? []
               : [{
-                  text: `${message ? message + ' ' : ''}[PDF Uploaded] ${file.name}`,
-                  isUser: true,
-                  messageId: `file-${Date.now()}`
-                }]),
+                text: `${message ? message + ' ' : ''}[PDF Uploaded] ${file.name}`,
+                isUser: true,
+                messageId: `file-${Date.now()}`
+              }]),
             ...(
               data.answer
                 ? [{
-                    text: data.answer,
-                    isUser: false,
-                    messageId: `answer-${Date.now()}`
-                  }]
+                  text: data.answer,
+                  isUser: false,
+                  messageId: `answer-${Date.now()}`
+                }]
                 : []
             )
           ]);
@@ -169,8 +169,8 @@ function App() {
     }
     // Otherwise, send just the message
     const messageId = Date.now().toString();
-    setMessages(prevMessages => [...prevMessages, { 
-      text: message, 
+    setMessages(prevMessages => [...prevMessages, {
+      text: message,
       isUser: true,
       messageId
     }]);
@@ -178,16 +178,16 @@ function App() {
     chatMutation.mutate({ message }, {
       onSuccess: (data) => {
         setLastFailedMessage(null);
-        setMessages(prevMessages => [...prevMessages, { 
-          text: data.reply, 
+        setMessages(prevMessages => [...prevMessages, {
+          text: data.reply,
           isUser: false,
           messageId: `response-${messageId}`
         }]);
       },
       onError: (error) => {
-        setMessages(prevMessages => [...prevMessages, { 
-          text: `Error: ${error.message}`, 
-          isUser: false, 
+        setMessages(prevMessages => [...prevMessages, {
+          text: `Error: ${error.message}`,
+          isUser: false,
           isError: true,
           messageId: `error-${messageId}`
         }]);
@@ -198,9 +198,6 @@ function App() {
   return (
     <div
       className="flex h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white"
-      style={{
-        '--header-height': 'clamp(4.5rem, 7vw, 4.5rem)'
-      } as React.CSSProperties}
     >
       <Sidebar onNewChat={handleNewChat} />
       <div className="flex flex-col flex-1">
@@ -228,9 +225,9 @@ function App() {
                   <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
                 </div>
               ) : chatHistoryQuery.isError ? (
-                <ChatHistoryError 
-                  error={chatHistoryQuery.error} 
-                  onRetry={() => chatHistoryQuery.refetch()} 
+                <ChatHistoryError
+                  error={chatHistoryQuery.error}
+                  onRetry={() => chatHistoryQuery.refetch()}
                 />
               ) : (
                 <div className="flex-1 flex flex-col min-h-0 w-full overflow-y-auto">
@@ -241,13 +238,8 @@ function App() {
             {/* Show chat messages if any */}
             {messages.length > 0 && (
               <>
-                <style>{`
-                  @media (max-width: 640px) {
-                    .chat-scroll-area { padding-top: calc(var(--header-height) * 1.6) !important; }
-                  }
-                `}</style>
                 <div
-                  className="chat-scroll-area flex flex-col overflow-y-auto gap-y-3 pt-4"
+                  className="chat-scroll-area flex flex-col overflow-y-auto gap-y-3 pt-32 px-4 sm:pt-4"
                   style={{
                     paddingBottom: '1em',
                     flex: 1,
