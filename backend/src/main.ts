@@ -2,14 +2,17 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import { ValidationPipe } from '@nestjs/common';
-import { LogstashLogger } from './logging/logstash-logger';
+import { BonsaiLogger } from './logging/bonsai-logger';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import * as cookieParser from 'cookie-parser';
 
 async function bootstrap() {
-  const logstashLogger = new LogstashLogger('logstash', 5000);
-  const app = await NestFactory.create(AppModule, { logger: logstashLogger });
+  const bonsaiLogger = new BonsaiLogger(
+    'https://srkpejt94t:oj9db58y8x@growidea-llc-search-5157941282.eu-central-1.bonsaisearch.net:443',
+    'morrochat-logs'
+  );
+  const app = await NestFactory.create(AppModule, { logger: bonsaiLogger });
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('app.port') || 3000;
