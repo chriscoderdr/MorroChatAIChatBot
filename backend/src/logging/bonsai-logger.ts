@@ -1,27 +1,31 @@
 import { LoggerService } from '@nestjs/common';
-import axios from 'axios';
+import { Client } from '@elastic/elasticsearch';
 
 export class BonsaiLogger implements LoggerService {
-  private bonsaiUrl: string;
+  private client: Client;
   private index: string;
 
   constructor(
     bonsaiUrl: string = 'https://srkpejt94t:oj9db58y8x@growidea-llc-search-5157941282.eu-central-1.bonsaisearch.net:443',
     index: string = 'morrochat-logs'
   ) {
-    this.bonsaiUrl = bonsaiUrl;
+    this.client = new Client({ node: bonsaiUrl });
     this.index = index;
+
+    // Optional: test connection on startup
+    this.client.ping({}, { requestTimeout: 30000 })
+      .then(() => console.log('Bonsai/Elasticsearch is up!'))
+      .catch(() => console.error('Bonsai/Elasticsearch cluster is down!'));
   }
 
   private async send(log: any) {
     try {
-      await axios.post(
-        `${this.bonsaiUrl}/${this.index}/_doc`,
-        log,
-        { headers: { 'Content-Type': 'application/json' } }
-      );
+      await this.client.index({
+        index: this.index,
+        document: log,
+      });
     } catch (e) {
-      // Optionally handle send errors
+      console.error('BonsaiLogger error:', e?.meta?.body?.error || e.message || e);
     }
   }
 
