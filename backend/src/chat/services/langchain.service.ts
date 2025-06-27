@@ -183,17 +183,27 @@ export class LangChainService {
 
         let selectedAgent: AgentExecutor;
 
-        // If the input or last AI message contains any document/file-related keyword, force document_search
+        // If the input contains any document/file-related keyword, force document_search
         if (documentKeywords.some(k => lowerCaseInput.includes(k))) {
           selectedAgent = documentAgent;
         }
+        // If the input contains any time-related keyword, force time agent
         else if (timeKeywords.some(k => lowerCaseInput.includes(k))) {
           selectedAgent = timeAgent;
-        } else if (weatherKeywords.some(k => lowerCaseInput.includes(k))) {
+        }
+        // If the input contains any weather-related keyword, force weather agent
+        else if (weatherKeywords.some(k => lowerCaseInput.includes(k))) {
           selectedAgent = weatherAgent;
-        } else if (researchKeywords.some(k => lowerCaseInput.includes(k))) {
+        }
+        // If the input contains any research-related keyword, force research agent
+        else if (researchKeywords.some(k => lowerCaseInput.includes(k))) {
           selectedAgent = researchAgent;
-        } else {
+        }
+        // If the previous agent was time/weather/document, and the new input matches research keywords, use research agent
+        else if ([timeAgent, weatherAgent, documentAgent].includes((input.chat_history.slice(-1)[0] as any)?.agent) && researchKeywords.some(k => lowerCaseInput.includes(k))) {
+          selectedAgent = researchAgent;
+        }
+        else {
           selectedAgent = generalAgent;
         }
 
