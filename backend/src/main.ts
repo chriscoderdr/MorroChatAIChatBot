@@ -9,7 +9,7 @@ import * as cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const bonsaiLogger = new BonsaiLogger(
-    'https://srkpejt94t:oj9db58y8x@growidea-llc-search-5157941282.eu-central-1.bonsaisearch.net:443',
+    process.env.BONSAI_URL || 'https://srkpejt94t:oj9db58y8x@growidea-llc-search-5157941282.eu-central-1.bonsaisearch.net:443',
     'morrochat-logs'
   );
   const app = await NestFactory.create(AppModule, { logger: bonsaiLogger });
