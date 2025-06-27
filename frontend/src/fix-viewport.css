@@ -23,3 +23,11 @@ html, body, #root {
   touch-action: none;
 }
 
+.fix-viewport {
+  height: 100dvh;
+}
+@supports not (height: 100dvh) {
+  .fix-viewport {
+    height: 100vh;
+  }
+}

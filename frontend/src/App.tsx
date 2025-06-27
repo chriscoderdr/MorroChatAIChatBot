@@ -197,7 +197,7 @@ function App() {
 
   return (
     <div
-      className="flex h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white"
+      className="flex fix-viewport bg-gradient-to-br from-gray-900 to-gray-800 text-white"
     >
       <Sidebar onNewChat={handleNewChat} />
       <div className="flex flex-col flex-1">
@@ -239,12 +239,7 @@ function App() {
             {messages.length > 0 && (
               <>
                 <div
-                  className="chat-scroll-area flex flex-col overflow-y-auto gap-y-3 pt-32 px-4 sm:pt-4"
-                  style={{
-                    paddingBottom: '1em',
-                    flex: 1,
-                    minHeight: 0
-                  }}
+                  className="flex flex-col overflow-y-auto gap-y-3 px-4 py-4"
                 >
                   {messages.map((msg, index) => {
                     const isLast = index === messages.length - 1;
