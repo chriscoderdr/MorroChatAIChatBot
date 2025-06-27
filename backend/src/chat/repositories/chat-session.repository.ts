@@ -28,7 +28,6 @@ export class ChatSessionRepository {
   }
 
   async createSession(userId: string, topic?: string): Promise<ChatSession> {
-    this.logger.log(`Creating new session: userId=${userId}, topic=${topic}`);
     const session = new this.chatSessionModel({
       userId,
       topic,

@@ -49,6 +49,5 @@ async function bootstrap() {
   app.use(cookieParser(process.env.COOKIE_SECRET || 'morro-chat-cookie-secret'));
 
   await app.listen(port);
-  logger.log(`Application running on port ${port}`);
 }
 bootstrap();

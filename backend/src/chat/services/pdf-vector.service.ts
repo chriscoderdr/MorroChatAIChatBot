@@ -61,7 +61,6 @@ export class PdfVectorService {
         documents: validEntries.map(entry => entry.doc.pageContent),
       });
 
-      this.logger.log(`Stored ${validEntries.length} valid chunks for user ${userId}. Filtered out ${docs.length - validEntries.length} invalid chunks.`);
       return { chunks: validEntries.length, filtered: docs.length - validEntries.length };
     } catch (error) {
       this.logger.error('Error in vectorizeAndStorePdf:', error);

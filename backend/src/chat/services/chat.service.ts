@@ -23,12 +23,12 @@ export class ChatService {
     const session = await this.chatSessionRepository.findByUserId(userId);
     if (!session) {
       await this.chatSessionRepository.createSession(userId, this.defaultTopic);
+      this.logger.log(`[NEW SESSION] userId=${userId}`);
     }
     return userId;
   }
 
   async invoke(userMessage: string, userId: string): Promise<string> {
-    this.logger.log(`Processing message for user ${userId}: ${userMessage}`);
     try {
       const agentWithHistory = await this.langChainService.createLangChainApp(this.defaultTopic);
       
@@ -57,8 +57,8 @@ export class ChatService {
         this.logger.error("Agent returned an unexpected structure.", result);
         finalResponseContent = "Sorry, I encountered an unexpected error.";
       }
-      
-      this.logger.log(`AI response for session ${userId} handled successfully.`);
+      // Log only the user question and answer for chat conversations
+      this.logger.log(`[CHAT] userId=${userId} question="${userMessage}" answer="${finalResponseContent}"`);
       return finalResponseContent;
 
     } catch (error) {

@@ -59,7 +59,6 @@ export class LangChainService {
         // Query ChromaDB for this user (parse CHROMA_URL like PdfVectorService)
         const chromaUrl = process.env.CHROMA_URL || "";
         const logger = this.logger || console;
-        logger.debug?.(`CHROMA_URL: ${chromaUrl}`);
         let host = '';
         let port = 8000;
         let ssl = false;
@@ -68,11 +67,9 @@ export class LangChainService {
           host = url.hostname;
           port = Number(url.port) || 8000;
           ssl = false;
-          logger.debug?.(`Parsed Chroma host: ${host}, port: ${port}, ssl: ${ssl}`);
         } catch (err) {
           logger.error?.(`Failed to parse CHROMA_URL: ${chromaUrl}`, err);
         }
-        logger.debug?.(`Attempting to connect to ChromaClient with host=${host}, port=${port}, ssl=${ssl}`);
         const chroma = new ChromaClient({ host, port, ssl });
         const collectionName = `user_${sessionId}`;
         const collection = await chroma.getOrCreateCollection({ name: collectionName });
@@ -163,62 +160,117 @@ export class LangChainService {
         const timeKeywords = ['hora', 'time', 'fecha', 'date', 'día', 'dia'];
         const weatherKeywords = ['clima', 'temperatura', 'weather', 'pronóstico', 'forecast', 'tiempo'];
         const documentKeywords = ['documento', 'pdf', 'file', 'archivo', 'subido', 'upload'];
+        const researchKeywords = [
+          "investiga", "busca en internet", "investigación", "research", "web_search", "buscar información", "averigua", "encuentra en la web",
+          // Company info triggers
+          "fundador", "founder", "fundadores", "founders", "año de fundación", "año fundación", "año de creacion", "año de creación", "año de inicio",
+          "fecha de fundación", "fecha de creacion", "fecha de creación", "industry", "ramo", "sector", "actividad principal", "empresa", "compañía", "company",
+          // Location/places/travel/tourism/experience triggers
+          "donde", "lugares", "sitios", "qué hacer", "que hacer", "places to visit", "things to do", "where can i", "what to do", "recommend", "recomienda", "atracciones", "turismo", "viajar", "visitar", "restaurantes", "bares", "vida nocturna",
+          // Expanded tourism/outing/romantic/fun triggers
+          "cerca de", "alrededor de", "en las proximidades de", "en las cercanías de",
+          "para divertirme", "para divertirse", "para pasarla bien", "para pasar bien", "pasar bien", "divertirme", "divertirse", "disfrutar", "entretenerme", "entretenerse", "salir",
+          "romántico", "romántica", "románticos", "románticas", "cita", "citas", "pareja", "parejas",
+          "hotel", "hoteles", "restaurante", "restaurantes", "comida", "comidas", "evento", "eventos",
+          "playa", "playas", "montaña", "montañas", "parque", "parques", "museo", "museos", "monumento", "monumentos",
+          "tour", "tours", "guía", "guías", "excursión", "excursiones", "actividad", "actividades",
+          // English
+          "near", "nearby", "around", "in the vicinity of", "close to",
+          "for fun", "to have fun", "to enjoy", "to go out", "nightlife",
+          "romantic", "romantics", "date", "dates", "couple", "couples",
+          "where can i have fun", "donde lo puedo pasar bien", "donde puedo divertirme", "donde puedo pasarla bien", "donde puedo disfrutar", "donde puedo salir", "donde puedo entretenerme", "donde puedo encontrar"
+        ];
 
         let selectedAgent: AgentExecutor;
 
         // If the input or last AI message contains any document/file-related keyword, force document_search
         if (documentKeywords.some(k => lowerCaseInput.includes(k)) || documentKeywords.some(k => lastAIMessage.includes(k))) {
-          this.logger.debug("Routing to Document Agent");
           selectedAgent = documentAgent;
         }
         else if (timeKeywords.some(k => lowerCaseInput.includes(k)) || lastAIMessage.includes("time") || lastAIMessage.includes("hora")) {
-          this.logger.debug("Routing to Time Agent");
           selectedAgent = timeAgent;
         } else if (weatherKeywords.some(k => lowerCaseInput.includes(k)) || lastAIMessage.includes("weather") || lastAIMessage.includes("clima")) {
-          this.logger.debug("Routing to Weather Agent");
           selectedAgent = weatherAgent;
-        } else if (
-          lowerCaseInput.includes("investiga") ||
-          lowerCaseInput.includes("busca en internet") ||
-          lowerCaseInput.includes("investigación") ||
-          lowerCaseInput.includes("research") ||
-          lowerCaseInput.includes("web_search") ||
-          lowerCaseInput.includes("buscar información") ||
-          lowerCaseInput.includes("averigua") ||
-          lowerCaseInput.includes("encuentra en la web") ||
-          // Company info triggers
-          lowerCaseInput.includes("fundador") ||
-          lowerCaseInput.includes("founder") ||
-          lowerCaseInput.includes("fundadores") ||
-          lowerCaseInput.includes("founders") ||
-          lowerCaseInput.includes("año de fundación") ||
-          lowerCaseInput.includes("año fundación") ||
-          lowerCaseInput.includes("año de creacion") ||
-          lowerCaseInput.includes("año de creación") ||
-          lowerCaseInput.includes("año de inicio") ||
-          lowerCaseInput.includes("fecha de fundación") ||
-          lowerCaseInput.includes("fecha de creacion") ||
-          lowerCaseInput.includes("fecha de creación") ||
-          lowerCaseInput.includes("industry") ||
-          lowerCaseInput.includes("ramo") ||
-          lowerCaseInput.includes("sector") ||
-          lowerCaseInput.includes("actividad principal") ||
-          lowerCaseInput.includes("empresa") ||
-          lowerCaseInput.includes("compañía") ||
-          lowerCaseInput.includes("company")
-        ) {
-          this.logger.debug("Routing to Research Agent");
+        } else if (researchKeywords.some(k => lowerCaseInput.includes(k))) {
           selectedAgent = researchAgent;
         } else {
-          this.logger.debug("Routing to General Agent");
           selectedAgent = generalAgent;
         }
 
-        // Forward config (which contains sessionId) to the selected agent
-        return selectedAgent.invoke({
+        // Try the selected agent
+        let result = await selectedAgent.invoke({
           input: input.input,
           chat_history: input.chat_history
         }, config);
+
+        // If the general agent was used and the answer is a refusal or fallback, try the research agent as a fallback
+        if (selectedAgent === generalAgent) {
+          const output = typeof result === 'string' ? result : (result && typeof result.output === 'string' ? result.output : '');
+          // Expanded heuristic: If the general agent says it can't answer, try the research agent
+          const fallbackRegex = new RegExp(
+            [
+              // Spanish refusals
+              'no puedo acceder a información en tiempo real',
+              'no puedo acceder a internet',
+              'no tengo acceso a internet',
+              'no puedo buscar',
+              'no puedo acceder a información actualizada',
+              'no puedo acceder a información actual',
+              'no puedo acceder a información externa',
+              'no puedo buscar en internet',
+              'no puedo acceder a información en la web',
+              'como modelo de lenguaje',
+              'no tengo acceso a información en tiempo real',
+              'no puedo navegar por internet',
+              'no tengo capacidad de buscar en internet',
+              'no tengo acceso a información externa',
+              // English refusals
+              'as a language model',
+              'i do not have access to real-time information',
+              'i do not have access to the internet',
+              'i cannot browse the internet',
+              'i am unable to browse the internet',
+              'i do not have access to current information',
+              'i cannot access external information',
+              'i cannot search the internet',
+              'i do not have access to up-to-date information',
+              'i do not have browsing capabilities',
+              'i am unable to access real-time information',
+              'i am unable to access the internet',
+              'i am unable to access current information',
+              'i am unable to access external information',
+              'i am unable to search the internet',
+              'i am unable to access up-to-date information',
+              'i am unable to access browsing capabilities',
+              'i recommend using an online search engine',
+              'please use an online search engine',
+              'i suggest using an online search engine',
+              'i suggest searching online',
+              'i recommend searching online',
+              'i recommend checking online',
+              'i recommend looking online',
+              'i recommend using google',
+              'i recommend using bing',
+              'i recommend using duckduckgo',
+              'i recommend using a search engine',
+              'i recommend you search online',
+              'i recommend you check online',
+              'i recommend you look online',
+              'i recommend you use google',
+              'i recommend you use bing',
+              'i recommend you use duckduckgo',
+              'i recommend you use a search engine',
+            ].join('|'),
+            'i'
+          );
+          if (output && fallbackRegex.test(output)) {
+            result = await researchAgent.invoke({
+              input: input.input,
+              chat_history: input.chat_history
+            }, config);
+          }
+        }
+        return result;
       }
     });
 
