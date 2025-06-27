@@ -2,20 +2,25 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
 import { ValidationPipe } from '@nestjs/common';
-import { BonsaiLogger } from './logging/bonsai-logger';
+
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import * as cookieParser from 'cookie-parser';
+import { CloudWatchLogger } from './logging/cloudwatch-logger';
 
 async function bootstrap() {
-  const bonsaiLogger = new BonsaiLogger(
-    process.env.BONSAI_URL || 'https://srkpejt94t:oj9db58y8x@growidea-llc-search-5157941282.eu-central-1.bonsaisearch.net:443',
-    'morrochat-logs'
-  );
-  const app = await NestFactory.create(AppModule, { logger: bonsaiLogger });
+
+  let app;
+  const hasCloudWatchEnv = process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY && process.env.AWS_REGION;
+  if (hasCloudWatchEnv) {
+    const cloudwatchLogger = new CloudWatchLogger();
+    app = await NestFactory.create(AppModule, { logger: cloudwatchLogger });
+  } else {
+    app = await NestFactory.create(AppModule, {});
+  }
 
   const configService = app.get(ConfigService);
-  const port = configService.get<number>('app.port') || 3000;
+  const port = (configService.get('app.port') as number) || 3000;
 
   // Global exception filter
   app.useGlobalFilters(new GlobalExceptionFilter());
