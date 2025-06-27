@@ -57,7 +57,7 @@ services:
       - backend
 
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.21
     container_name: morrochat-elasticsearch
     environment:
       - discovery.type=single-node
