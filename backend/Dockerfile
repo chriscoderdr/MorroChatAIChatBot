@@ -7,6 +7,7 @@ RUN npm set fetch-retries 5 \
   && npm set fetch-retry-maxtimeout 120000 \
   && until npm ci; do echo "Retrying npm ci..."; sleep 10; done
 COPY . .
+ENV NODE_OPTIONS=--max-old-space-size=2048
 RUN npm run build
 
 # ---- Production Stage ----
