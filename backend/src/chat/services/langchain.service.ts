@@ -184,12 +184,12 @@ export class LangChainService {
         let selectedAgent: AgentExecutor;
 
         // If the input or last AI message contains any document/file-related keyword, force document_search
-        if (documentKeywords.some(k => lowerCaseInput.includes(k)) || documentKeywords.some(k => lastAIMessage.includes(k))) {
+        if (documentKeywords.some(k => lowerCaseInput.includes(k))) {
           selectedAgent = documentAgent;
         }
-        else if (timeKeywords.some(k => lowerCaseInput.includes(k)) || lastAIMessage.includes("time") || lastAIMessage.includes("hora")) {
+        else if (timeKeywords.some(k => lowerCaseInput.includes(k))) {
           selectedAgent = timeAgent;
-        } else if (weatherKeywords.some(k => lowerCaseInput.includes(k)) || lastAIMessage.includes("weather") || lastAIMessage.includes("clima")) {
+        } else if (weatherKeywords.some(k => lowerCaseInput.includes(k))) {
           selectedAgent = weatherAgent;
         } else if (researchKeywords.some(k => lowerCaseInput.includes(k))) {
           selectedAgent = researchAgent;
