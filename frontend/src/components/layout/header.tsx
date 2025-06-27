@@ -7,7 +7,6 @@ export const Header = forwardRef<HTMLDivElement>((_props, ref) => (
       <img src={MorroLogo} alt="MorroChat Logo" className="h-8 w-8" />
       <h1 className="text-xl font-bold text-white">MorroChat</h1>
     </div>
-    {/* You can add user profile/settings icon here */}
   </header>
 ));
 Header.displayName = 'Header';
