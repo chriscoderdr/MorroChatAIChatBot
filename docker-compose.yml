@@ -65,6 +65,9 @@ services:
       - ES_JAVA_OPTS=-Xms256m -Xmx256m
       - xpack.security.enrollment.enabled=true
       - ES_XPACK_SECURITY_ENROLLMENT_ENABLED=true
+      - xpack.security.http.ssl.enabled=true
+      - xpack.security.http.ssl.keystore.path=certs/http.p12
+      - xpack.security.http.ssl.truststore.path=certs/http.p12
     deploy:
       resources:
         limits:
@@ -73,6 +76,7 @@ services:
       - "9200:9200"
     volumes:
       - es_data:/usr/share/elasticsearch/data
+      - es_certs:/usr/share/elasticsearch/config/certs
     restart: unless-stopped
 
   kibana:
@@ -106,3 +110,4 @@ volumes:
   mongo_data:
   chroma_data:
   es_data:
+  es_certs:
