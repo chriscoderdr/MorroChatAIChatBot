@@ -243,13 +243,13 @@ function App() {
               <>
                 <style>{`
                   @media (max-width: 640px) {
-                    .chat-scroll-area { padding-top: var(--header-height, 3.5rem) !important; }
+                    .chat-scroll-area { padding-top: calc(var(--header-height) * 1.6) !important; }
                   }
                 `}</style>
                 <div
                   className="chat-scroll-area flex flex-col overflow-y-auto gap-y-3 pt-4"
                   style={{
-                    paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
+                    paddingBottom: '1em',
                     flex: 1,
                     minHeight: 0
                   }}

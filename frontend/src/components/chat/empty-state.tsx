@@ -26,7 +26,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({ onSuggestionClick }) => 
         </div>
       <h1 className="text-4xl font-bold text-white mb-2">How can I help you today?</h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-12 w-full max-w-3xl">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-12 w-full max-w-3xl pb-32">
         {suggestionCards.map((card, index) => (
           <Card 
             key={index} 
