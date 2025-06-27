@@ -1,3 +1,4 @@
+
 services:
   mongo:
     image: mongo:7
@@ -48,12 +49,36 @@ services:
     container_name: morrochat-logstash
     restart: unless-stopped
     volumes:
-      - ./backend/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+      - ./config/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
     ports:
       - "5044:5044"
       - "5000:5000"
     depends_on:
       - backend
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+    container_name: morrochat-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    restart: unless-stopped
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.4
+    container_name: morrochat-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
 
   frontend:
     build:
@@ -71,3 +96,4 @@ services:
 volumes:
   mongo_data:
   chroma_data:
+  es_data:
