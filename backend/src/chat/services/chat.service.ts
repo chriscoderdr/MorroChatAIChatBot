@@ -4,6 +4,7 @@ import { ChatSessionRepository } from '../repositories/chat-session.repository';
 import { StoredMongoMessage } from '../schemas/chat-session.schema';
 import { BaseMessage } from '@langchain/core/messages';
 import { ConfigService } from '@nestjs/config';
+import { withSessionMutex } from './session-mutex';
 
 @Injectable()
 export class ChatService {
@@ -71,8 +72,10 @@ export class ChatService {
   }
 
   async processChat(userMessage: string, userId: string): Promise<{ reply: string }> {
-    await this.getOrCreateSession(userId);
-    const reply = await this.invoke(userMessage, userId);
-    return { reply };
+    return withSessionMutex(userId, async () => {
+      await this.getOrCreateSession(userId);
+      const reply = await this.invoke(userMessage, userId);
+      return { reply };
+    });
   }
 }
