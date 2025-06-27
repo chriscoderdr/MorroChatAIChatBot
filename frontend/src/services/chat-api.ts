@@ -1,6 +1,11 @@
 import type { AxiosProgressEvent } from 'axios';
 import type { ChatHistory, ChatMessage } from '../models/chatMessage';
 import axios from 'axios';
+export type { UploadPdfResponse } from '../dtos/upload-pdf-response-dto';
+export type { NewChatResponse } from '../dtos/new-chat-response-dto';
+export type { SendMessagePayload } from '../dtos/send-message-payload-dto';
+export type { ChatResponse } from '../dtos/chat-response-dto';
+
 import type { UploadPdfResponse } from '../dtos/upload-pdf-response-dto';
 import type { NewChatResponse } from '../dtos/new-chat-response-dto';
 import type { SendMessagePayload } from '../dtos/send-message-payload-dto';
