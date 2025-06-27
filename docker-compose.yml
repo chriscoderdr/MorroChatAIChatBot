@@ -62,12 +62,7 @@ services:
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=true
-      - ES_JAVA_OPTS=-Xms256m -Xmx256m
-      - xpack.security.enrollment.enabled=true
-      - ES_XPACK_SECURITY_ENROLLMENT_ENABLED=true
-      - xpack.security.http.ssl.enabled=true
-      - xpack.security.http.ssl.keystore.path=certs/http.p12
-      - xpack.security.http.ssl.truststore.path=certs/http.p12
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
     deploy:
       resources:
         limits:
@@ -84,9 +79,6 @@ services:
     container_name: morrochat-kibana
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-      - xpack.security.enabled=true
-      - xpack.security.enrollment.enabled=true
-      - ES_XPACK_SECURITY_ENROLLMENT_ENABLED=true
     ports:
       - "5601:5601"
     depends_on:
