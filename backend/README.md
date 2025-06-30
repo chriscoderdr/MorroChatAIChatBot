@@ -23,6 +23,16 @@ A NestJS backend for the MorroChat application, a chatbot specialized in Dom### 
 ## Project Structure
 
 ```
+# Throttle (rate limiting)
+THROTTLE_TTL=30
+THROTTLE_LIMIT=100
+
+# AWS CloudWatch Logging (optional)
+# CLOUDWATCH_LOG_GROUP=morrochat-logs
+# CLOUDWATCH_LOG_STREAM=app
+# AWS_REGION=eu-central-1
+# AWS_ACCESS_KEY_ID=your_aws_access_key_id
+# AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
 backend/
 ├── src/
 │   ├── chat/                 # Chat feature module
