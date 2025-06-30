@@ -74,7 +74,13 @@ npm install
 ```
 NODE_ENV=development
 PORT=3000
+# MongoDB connection options
 MONGO_URI=mongodb://localhost:27017/morro_chat
+MONGO_MAX_POOL_SIZE=10
+MONGO_MIN_POOL_SIZE=2
+MONGO_SOCKET_TIMEOUT_MS=45000
+MONGO_CONNECT_TIMEOUT_MS=10000
+MONGO_BUFFER_COMMANDS=false
 GEMINI_API_KEY=your_gemini_api_key
 CHAT_DEFAULT_TOPIC=Dominican Food
 # Throttle (rate limiting)
