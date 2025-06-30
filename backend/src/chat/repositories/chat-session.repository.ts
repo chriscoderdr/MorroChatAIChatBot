@@ -16,15 +16,8 @@ export class ChatSessionRepository {
   ) {}
 
   async findByUserId(userId: string): Promise<ChatSession | null> {
-    const cachedSession = this.sessionCacheService.getSession(userId);
-    if (cachedSession) {
-      return cachedSession;
-    }
-    const session = await this.chatSessionModel.findOne({ userId }).exec();
-    if (session) {
-      this.sessionCacheService.setSession(userId, session);
-    }
-    return session;
+    // Always fetch from MongoDB for latest data
+    return await this.chatSessionModel.findOne({ userId }).exec();
   }
 
   async createSession(userId: string, topic?: string): Promise<ChatSession> {

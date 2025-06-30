@@ -77,6 +77,9 @@ PORT=3000
 MONGO_URI=mongodb://localhost:27017/morro_chat
 GEMINI_API_KEY=your_gemini_api_key
 CHAT_DEFAULT_TOPIC=Dominican Food
+# Throttle (rate limiting)
+THROTTLE_TTL=30
+THROTTLE_LIMIT=100
 ```
 
 ### Running the Application
@@ -98,7 +101,7 @@ API documentation is available at `/api/docs` when the application is running.
 
 - Chat with an AI assistant specialized in Dominican food
 - Persistent chat history
-- Rate limiting to prevent abuse
+- Rate limiting to prevent abuse (configurable via `THROTTLE_TTL` and `THROTTLE_LIMIT` in `.env`)
 - Error handling and logging
 - Swagger API documentation
 

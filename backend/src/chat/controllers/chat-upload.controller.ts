@@ -39,25 +39,10 @@ export class ChatUploadController {
       // Retrieve similar chunks from Chroma
       const results = await this.pdfRetrievalService.similaritySearch(userId, queryEmbedding, 5);
       const contextChunks = (results.documents?.[0] || []).join('\n\n');
-      // Use Gemini LLM to answer the question with the context
-      const llm = await this.langChainService.createLangChainApp();
-      const response = await llm.invoke(
-        {
-          input: `Given the following document context, answer the user's question.\n\nContext:\n${contextChunks}\n\nQuestion: ${message}`,
-          chat_history: [],
-        },
-        {
-          configurable: {
-            sessionId: userId,
-          },
-        }
-      );
-      answer = typeof response === 'string' ? response : (response as any).output;
-      // Add the Q&A to the chat history
-      await this.chatService.processChat(message, userId); // user question
-      if (typeof answer === 'string') {
-        await this.chatService.processChat(answer, userId);  // AI answer
-      }
+      // Always use processChat so message history is persisted
+      const userPrompt = `Given the following document context, answer the user's question.\n\nContext:\n${contextChunks}\n\nQuestion: ${message}`;
+      const chatResult = await this.chatService.processChat(userPrompt, userId);
+      answer = chatResult.reply;
     }
 
     return {

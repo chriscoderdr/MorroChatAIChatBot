@@ -7,35 +7,45 @@ import { APP_GUARD } from '@nestjs/core';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AppConfigModule } from './config/config.module';
 import { BrowserSessionMiddleware } from './common/middlewares/browser-session.middleware';
+import { ConfigService } from '@nestjs/config';
 
 @Module({
   imports: [
     AppConfigModule,
-    ThrottlerModule.forRoot({
-      throttlers: [
-        {
-          ttl: seconds(30),
-          limit: 100,
-        }
-      ]
+    ThrottlerModule.forRootAsync({
+      imports: [AppConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const ttl = configService.get<number>('throttle.ttl');
+        const limit = configService.get<number>('throttle.limit');
+        const safeTtl = typeof ttl === 'number' && !isNaN(ttl) ? ttl : 30;
+        const safeLimit = typeof limit === 'number' && !isNaN(limit) ? limit : 100;
+        return {
+          throttlers: [
+            {
+              ttl: seconds(safeTtl),
+              limit: safeLimit,
+            }
+          ]
+        };
+      },
     }),
     MongooseModule.forRootAsync({
-      useFactory: () => ({
-        uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/morro_chat',
-        // Connection pool settings
+      imports: [AppConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        uri: configService.get<string>('database.mongoUri'),
         connectionFactory: (connection) => {
           connection.on('connected', () => {
             console.log('MongoDB connection established successfully');
           });
           return connection;
         },
-        // Modern MongoDB connection options (compatible with newer MongoDB drivers)
-        maxPoolSize: 10,
-        minPoolSize: 2,
-        socketTimeoutMS: 45000,
-        connectTimeoutMS: 10000,
-        // Enable in-memory caching
-        bufferCommands: false,
+        maxPoolSize: configService.get<number>('database.maxPoolSize'),
+        minPoolSize: configService.get<number>('database.minPoolSize'),
+        socketTimeoutMS: configService.get<number>('database.socketTimeoutMS'),
+        connectTimeoutMS: configService.get<number>('database.connectTimeoutMS'),
+        bufferCommands: configService.get<boolean>('database.bufferCommands'),
       }),
     }),
     ChatModule
