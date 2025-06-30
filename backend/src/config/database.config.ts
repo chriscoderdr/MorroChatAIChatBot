@@ -6,5 +6,5 @@ export default registerAs('database', () => ({
   minPoolSize: parseInt(process.env.MONGO_MIN_POOL_SIZE || '2', 10),
   socketTimeoutMS: parseInt(process.env.MONGO_SOCKET_TIMEOUT_MS || '45000', 10),
   connectTimeoutMS: parseInt(process.env.MONGO_CONNECT_TIMEOUT_MS || '10000', 10),
-  bufferCommands: process.env.MONGO_BUFFER_COMMANDS === 'true' ? true : false,
+  bufferCommands: process.env.MONGO_BUFFER_COMMANDS === 'true' ? true : false
 }));
