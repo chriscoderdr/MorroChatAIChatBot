@@ -3,7 +3,7 @@ import { Header } from './components/layout/header';
 import { Sidebar } from './components/layout/side-bar';
 import { useNewChatMutation } from './hooks/useNewChatMutation';
 import { ChatMessage } from './components/chat/chat-message';
-import { ChatInput } from './components/chat/chat-input';
+import { EnhancedChatInput } from './components/chat/enhanced-chat-input';
 import { FileUploadBubble } from './components/chat/file-upload-bubble';
 import { EmptyState } from './components/chat/empty-state';
 import { ChatHistoryError } from './components/chat/chat-history-error';
@@ -295,7 +295,7 @@ function App() {
             />
           </div>
         )}
-        <ChatInput
+        <EnhancedChatInput
           onSendMessage={handleSendMessage}
           isLoading={chatMutation.isPending || uploadPdfMutation.isPending}
         />

@@ -2,6 +2,7 @@ import React from 'react';
 import { MarkdownRenderer } from '../ui/markdown-renderer';
 import { CodingTypingIndicator } from '../ui/coding-typing-indicator';
 import { GeneralTypingIndicator } from '../ui/general-typing-indicator';
+import { UserMessageBubble } from './user-message-bubble';
 
 interface ChatBubbleProps {
   message: string;
@@ -45,29 +46,31 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   }
 
   return (
-    <div className={`w-full max-w-xs sm:max-w-md md:max-w-4xl px-2 sm:px-4 py-2 sm:py-3 rounded-2xl ${bubbleClasses}`}>
+    <div className="w-full max-w-xs sm:max-w-md md:max-w-4xl">
       {isUser ? (
-        <p className="text-xs sm:text-sm whitespace-pre-wrap">{message}</p>
+        <UserMessageBubble message={message} />
       ) : (
-        <div className="text-xs sm:text-sm">
-          <MarkdownRenderer content={message} />
-        </div>
-      )}
-      
-      {isError && onRetry && (
-        <div className="mt-2 sm:mt-3 flex items-center">
-          <button 
-            onClick={onRetry}
-            className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-xs font-medium rounded-md transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-              <path d="M21 3v5h-5" />
-              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-              <path d="M8 16H3v5" />
-            </svg>
-            Retry
-          </button>
+        <div className={`px-2 sm:px-4 py-2 sm:py-3 rounded-2xl ${bubbleClasses}`}>
+          <div className="text-xs sm:text-sm">
+            <MarkdownRenderer content={message} />
+          </div>
+          
+          {isError && onRetry && (
+            <div className="mt-2 sm:mt-3 flex items-center">
+              <button 
+                onClick={onRetry}
+                className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-xs font-medium rounded-md transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+                  <path d="M21 3v5h-5" />
+                  <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+                  <path d="M8 16H3v5" />
+                </svg>
+                Retry
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

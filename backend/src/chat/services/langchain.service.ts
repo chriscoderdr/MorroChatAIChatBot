@@ -182,10 +182,11 @@ export class LangChainService {
     );
 
     // Create specialized tool sets for different agent types
-    const timeTools = allDynamicTools.filter(tool => tool.name === 'current_time' || tool.name === 'web_search');
-    const weatherTools = allDynamicTools.filter(tool => tool.name === 'open_weather_map' || tool.name === 'web_search');
-    const researchTools = allDynamicTools.filter(tool => tool.name === 'web_search' || tool.name === 'calculator');
-    const documentTools = allDynamicTools.filter(tool => tool.name === 'pdf_retrieval' || tool.name === 'web_search');
+    // Use the original tools directly for specialized agents to avoid schema conflicts
+    const timeTools = [currentTimeTool, searchTool];
+    const weatherTools = [openWeatherMapTool, searchTool];
+    const researchTools = [searchTool];
+    const documentTools = [chromaTool, searchTool];
     const generalTools = allDynamicTools; // General agent gets all tools
 
     const createAgentExecutor = (systemMessage: string, agentType: 'general' | 'specialized' = 'specialized', tools?: any[]): AgentExecutor => {
@@ -224,7 +225,7 @@ export class LangChainService {
           'hora', 'time', 'fecha', 'date', 'día', 'dia',
           'what time', 'current time', 'time in', 'time is',
           'timezone', 'clock', 'now in', 'hora en',
-          'qué hora', 'que hora', 'tiempo en', 'what\'s the time',
+          'qué hora', 'que hora', 'what\'s the time',
           'tell me the time', 'current local time', 'local time'
         ];
         const weatherKeywords = ['clima', 'temperatura', 'weather', 'pronóstico', 'forecast', 'llover', 'lluvia', 'rain', 'snow', 'nieve', 'cloudy', 'nublado', 'sunny', 'soleado', 'cold', 'frío', 'hot', 'calor', 'wind', 'viento'];

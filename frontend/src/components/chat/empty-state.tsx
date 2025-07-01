@@ -1,5 +1,6 @@
 import React from 'react';
 import { Card } from '../ui/card';
+import { Code2, Lightbulb, Search, Zap } from 'lucide-react';
 import MorroLogo from '../../assets/morro-logo.svg';
 
 interface EmptyStateProps {
@@ -8,15 +9,34 @@ interface EmptyStateProps {
 
 export const EmptyState: React.FC<EmptyStateProps> = ({ onSuggestionClick }) => {
   const suggestionCards = [
-    { title: "Optimize this code", description: "for better performance and readability" },
-    { title: "Analyze complexity", description: "of my algorithm implementation" },
-    { title: "Explain in simple terms", description: "what makes React so powerful" },
-    { title: "Review my code", description: "and suggest improvements" },
+    { 
+      title: "Code Analysis", 
+      description: "Upload or paste code for optimization review",
+      icon: Code2,
+      example: "```javascript\nfunction example() {\n  return 'Hello';\n}\n```"
+    },
+    { 
+      title: "Performance Review", 
+      description: "Analyze algorithm complexity and performance",
+      icon: Zap,
+      example: "Analyze the performance of:\n```code\n// Your algorithm here\n```"
+    },
+    { 
+      title: "General Questions", 
+      description: "Ask about programming concepts and best practices",
+      icon: Lightbulb,
+      example: "Explain the difference between REST and GraphQL"
+    },
+    { 
+      title: "Debug Help", 
+      description: "Get help fixing bugs and errors",
+      icon: Search,
+      example: "Debug this code:\n```python\n# Your buggy code here\n```"
+    },
   ];
 
-  const handleCardClick = (card: { title: string; description: string }) => {
-    const fullMessage = `${card.title} ${card.description}`;
-    onSuggestionClick(fullMessage);
+  const handleCardClick = (card: { title: string; description: string; icon: any; example: string }) => {
+    onSuggestionClick(card.example);
   };
 
   return (
@@ -27,25 +47,27 @@ export const EmptyState: React.FC<EmptyStateProps> = ({ onSuggestionClick }) => 
       <h1 className="text-4xl font-bold text-white mb-2">How can I help you today?</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-12 w-full max-w-3xl pb-32">
-        {suggestionCards.map((card, index) => (
-          <Card 
-            key={index} 
-            className="text-left hover:bg-gray-700/80 transition-all cursor-pointer group"
-            onClick={() => handleCardClick(card)}
-          >
-            <div className="flex items-start gap-3">
-              <div className="bg-blue-500/20 p-2 rounded-lg group-hover:bg-blue-500/30 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                </svg>
+        {suggestionCards.map((card, index) => {
+          const IconComponent = card.icon;
+          return (
+            <Card 
+              key={index} 
+              className="text-left hover:bg-gray-700/80 transition-all cursor-pointer group"
+              onClick={() => handleCardClick(card)}
+            >
+              <div className="flex items-start gap-3">
+                <div className="bg-blue-500/20 p-2 rounded-lg group-hover:bg-blue-500/30 transition-colors">
+                  <IconComponent className="h-5 w-5 text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white">{card.title}</h3>
+                  <p className="text-sm text-gray-400">{card.description}</p>
+                  <p className="text-xs text-blue-400 mt-1 font-mono">Click to try →</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-semibold text-white">{card.title}</h3>
-                <p className="text-sm text-gray-400">{card.description}</p>
-              </div>
-            </div>
-          </Card>
-        ))}
+            </Card>
+          );
+        })}
       </div>
     </div>
   );
