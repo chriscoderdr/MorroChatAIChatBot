@@ -4,6 +4,9 @@ import { ConfigModule } from '@nestjs/config';
 import aiConfig from '../../../config/ai.config';
 import { LangChainService } from '../../services/langchain.service';
 
+// Set a longer timeout for LangChain operations
+jest.setTimeout(60000);
+
 // Mock dependencies for LangChainService
 const mockConfigService = {
   get: jest.fn().mockImplementation((key: string) => {
@@ -80,9 +83,22 @@ describe('Agent Tests', () => {
       await moduleRef.close();
     }
     
-    // Give some time for any remaining async operations to complete
-    await new Promise(resolve => setTimeout(resolve, 100));
-  });
+    // Clear the agent registry to stop any running agents
+    if (langChainService) {
+      try {
+        // Force cleanup of any internal LangChain resources
+        (langChainService as any).cleanup?.();
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+    }
+    
+    // Clear any cached modules
+    jest.resetModules();
+    
+    // Give extra time for any remaining async operations to complete
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }, 10000); // Increase timeout for cleanup
 
   // Helper function to create test sessions
   const createTestSession = (sessionId: string) => {

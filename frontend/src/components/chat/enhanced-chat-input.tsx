@@ -5,6 +5,7 @@ import { Code2, Eye, EyeOff, Lightbulb } from 'lucide-react';
 interface EnhancedChatInputProps {
     onSendMessage: (message: string, file?: File | null) => void;
     isLoading: boolean;
+    isCodeGuideOpen?: boolean;
     setIsCodeGuideOpen: (isOpen: boolean) => void;
 }
 
