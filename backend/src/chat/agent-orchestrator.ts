@@ -101,7 +101,7 @@ export class AgentOrchestrator {
     const hasDocuments = this.hasDocumentContext(context);
 
     // Create a focused system prompt that forces JSON-only responses
-    const systemPrompt = `You are a strict JSON routing API. You MUST respond with ONLY a JSON object, no other text.
+    const systemPrompt = `CRITICAL: You are a JSON-only routing API. You MUST return ONLY a JSON object. NO conversational text.
 
 AVAILABLE AGENTS:
 ${availableAgents.map(agent => `- ${agent}: ${this.getAgentDescription(agent)}`).join('\n')}
@@ -110,19 +110,20 @@ USER QUERY: "${input}"
 ${context.chatHistory && context.chatHistory.length > 0 ? `\nCONTEXT: ${context.chatHistory.slice(-2).map((msg: any) => `${msg.type}: ${msg.content}`).join(', ')}` : ''}
 ${hasDocuments ? '\n⚠️  DOCUMENT CONTEXT DETECTED: User has uploaded documents in this session. For ambiguous queries without clear subject, prefer document_search agent.' : ''}
 
-CRITICAL ROUTING RULES:
-- "hora", "time", "día", "dia", "date", "fecha", "what day", "que dia", "hoy", "today" → time agent (intelligent time agent with multilingual support)
-- "clima", "weather", "temperature", "temperatura", "tiempo", "forecast", "pronóstico" → open_weather_map or weather agents  
-- "document", "archivo", "documento", "trata", "uploaded file", "de que trata", "what is this about", "que dice", "details", "content", "summary" → document_search agent
-- Company info, people, research queries → research agent
-- Code questions → code_interpreter agent
-- **AMBIGUOUS QUERIES**: If the query is vague, unclear, or doesn't specify a subject (like "what is this?", "tell me about it", "what does it say?", "explain this", "details", "summary"), AND documents are available in context → document_search agent
-- Everything else → general agent
+ROUTING RULES (STRICT PRIORITY ORDER):
+1. Personal/conversational queries (names, greetings, relationships, introductions) → general agent
+2. Time queries ("hora", "time", "día", "today", "hoy") → time agent  
+3. Weather queries ("clima", "weather", "temperature") → open_weather_map agent
+4. Explicit document queries ("document", "documento", "de que trata", "what is this document") → document_search agent
+5. Research queries (companies, people, facts) → research agent
+6. Code queries → code_interpreter agent
+7. Ambiguous queries WITH document context → document_search agent
+8. Everything else → general agent
 
-MANDATORY RESPONSE FORMAT (NO OTHER TEXT ALLOWED):
+MANDATORY RESPONSE FORMAT - RESPOND WITH ONLY THIS JSON:
 {"agentName": "agent_name", "confidence": 0.85, "reasoning": "brief reason"}
 
-RESPOND WITH ONLY THE JSON OBJECT. NO MARKDOWN, NO EXPLANATIONS, NO OTHER TEXT.`;
+DO NOT WRITE ANY OTHER TEXT. DO NOT BE CONVERSATIONAL. ONLY JSON.`;
 
     try {
       const boundCallAgent = AgentRegistry.callAgent.bind(AgentRegistry);
@@ -246,16 +247,27 @@ RESPOND WITH ONLY THE JSON OBJECT. NO MARKDOWN, NO EXPLANATIONS, NO OTHER TEXT.`
       }
     }
     
-    // Enhanced document detection
-    if (inputLower.includes('document') || inputLower.includes('archivo') || inputLower.includes('documento') || 
-        inputLower.includes('trata') || inputLower.includes('uploaded') || inputLower.includes('what is this') ||
-        inputLower.includes('que es esto') || inputLower.includes('que dice') || inputLower.includes('what does it say') ||
-        inputLower.includes('details') || inputLower.includes('detalles') || inputLower.includes('summary') ||
-        inputLower.includes('resumen') || inputLower.includes('about this') || inputLower.includes('sobre esto') ||
-        inputLower.includes('content') || inputLower.includes('contenido') || inputLower.includes('explain this') ||
-        inputLower.includes('explica esto') || inputLower.includes('tell me about') || inputLower.includes('dime sobre')) {
+    // Personal/conversational query detection (higher priority than document detection)
+    const personalQueries = ['llamo', 'nombre', 'name', 'soy', 'me llamo', 'my name', 'i am', 'hello', 'hola', 
+                           'hi', 'greeting', 'saludo', 'amor', 'love', 'relationship', 'relación', 'novios', 
+                           'boyfriend', 'girlfriend', 'tratame', 'treat me', 'llamame', 'call me'];
+    
+    const isPersonalQuery = personalQueries.some(term => inputLower.includes(term));
+    
+    if (isPersonalQuery && availableAgents.includes('general')) {
+      console.log('Fallback: Detected personal/conversational query, routing to general agent');
+      return { agentName: 'general', confidence: 0.8 };
+    }
+    
+    // Enhanced document detection (only explicit document references)
+    if ((inputLower.includes('document') && !inputLower.includes('documento')) || 
+        inputLower.includes('archivo') || inputLower.includes('documento') || 
+        inputLower.includes('de que trata') || inputLower.includes('uploaded') || 
+        inputLower.includes('what is this document') || inputLower.includes('que es este documento') ||
+        inputLower.includes('what does it say') || inputLower.includes('que dice el documento') ||
+        inputLower.includes('pdf') || inputLower.includes('file content') || inputLower.includes('contenido del archivo')) {
       if (availableAgents.includes('document_search')) {
-        console.log('Fallback: Detected document query, routing to document_search agent');
+        console.log('Fallback: Detected explicit document query, routing to document_search agent');
         return { agentName: 'document_search', confidence: 0.6 };
       }
     }
