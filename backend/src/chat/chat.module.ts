@@ -3,6 +3,7 @@ import "./summarizer.agent";
 import "./research.agent";
 import "./code-interpreter.agent";
 import "./code-optimization.agent";
+import "./weather.agent";
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { LangChainService } from './services/langchain.service';

@@ -109,6 +109,21 @@ npm run build
 npm run start:prod
 ```
 
+### Running Tests
+
+```bash
+# Run agent unit tests
+npm run test:agents
+
+# Run functional API tests (requires running server)
+npm run test:functional
+
+# Run all tests
+npm run test:all
+```
+
+See [TESTING.md](TESTING.md) for detailed information about the testing infrastructure.
+
 ### API Documentation
 
 API documentation is available at `/api/docs` when the application is running.

@@ -17,6 +17,7 @@ import { Model } from "mongoose";
 import { ChatPromptTemplate, MessagesPlaceholder } from "@langchain/core/prompts";
 import { AgentExecutor, createToolCallingAgent } from "langchain/agents";
 import { BaseMessage } from "@langchain/core/messages";
+import { AgentOrchestrator } from "../agent-orchestrator";
 
 @Injectable()
 export class LangChainService {
@@ -28,6 +29,22 @@ export class LangChainService {
   ) {
     // Initialize and register built-in agents immediately
     this.initializeBuiltInAgents();
+    
+    // Log that we're using AgentOrchestrator for consistent message history
+    this.logger.log('Initializing LangChainService with AgentOrchestrator for consistent message history');
+    
+    // Validate that AgentOrchestrator and AgentRegistry are properly loaded
+    if (!AgentOrchestrator) {
+      this.logger.error('AgentOrchestrator is not available - message history may not work properly');
+    } else {
+      this.logger.log('AgentOrchestrator is available and will be used for agent routing');
+    }
+    
+    if (!AgentRegistry) {
+      this.logger.error('AgentRegistry is not available - agent plugins may not work properly');
+    } else {
+      this.logger.log(`AgentRegistry has ${AgentRegistry.getAllAgents().length} agents registered`);
+    }
   }
 
   private async initializeBuiltInAgents() {
@@ -40,6 +57,12 @@ export class LangChainService {
   }
 
   async createLangChainApp(topic?: string) {
+    this.logger.log('Creating LangChain app and initializing all required agents...');
+    
+    // Check the current state of agent registry
+    const registeredAgents = AgentRegistry.getAllAgents().map(a => a.name);
+    this.logger.log(`Currently registered agents: ${registeredAgents.join(', ') || 'none'}`);
+    
     const provider = this.configService.get<string>('ai.provider') || 'gemini';
     let llm: BaseChatModel;
     if (provider === 'openai') {
@@ -218,21 +241,85 @@ export class LangChainService {
       description: "Provides the current weather for a specific city.",
       schema: z.object({ location: z.string().describe("The city and country, e.g., 'Santo Domingo, DO'.") }),
       func: async ({ location }: { location: string }) => {
+        // Validate and enhance the location query
+        if (!location || location.trim().length === 0) {
+          return "Please provide a valid location to check the weather.";
+        }
+        
+        // Clean up the location string
+        const cleanLocation = location.trim().replace(/^(in|en|at|for|para)\s+/i, '');
+        
+        // Get API key from config
         const apiKey = this.configService.get<string>('OPENWEATHER_API_KEY');
-        if (!apiKey) return "OpenWeatherMap API key is missing.";
+        if (!apiKey) {
+          console.error("OpenWeatherMap API key is missing from configuration");
+          return "OpenWeatherMap API key is missing.";
+        }
+        
+        console.log(`OpenWeatherMapTool: Fetching weather for "${cleanLocation}"`);
+        
         try {
-          const geoUrl = `http://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(location)}&limit=1&appid=${apiKey}`;
+          // First get geocoding data to convert location to coordinates
+          // Make sure we're using https, not http (might be blocked by browser security)
+          const geoUrl = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(cleanLocation)}&limit=1&appid=${apiKey}`;
+          console.log(`Calling geocoding API for: ${cleanLocation}`);
+          
+          // Fetch geocoding data
           const geoRes = await fetch(geoUrl);
+          
+          // Check for HTTP errors first
+          if (!geoRes.ok) {
+            console.error(`Geocoding API error: HTTP ${geoRes.status} - ${geoRes.statusText}`);
+            const errorText = await geoRes.text();
+            console.error(`Response body: ${errorText}`);
+            return `Could not find location data for ${cleanLocation}. API returned error ${geoRes.status}.`;
+          }
+          
+          // Parse the response
           const geoData = await geoRes.json();
-          if (!geoRes.ok || geoData.length === 0) return `Could not find location data for ${location}.`;
+          console.log(`Geocoding response for "${cleanLocation}": ${JSON.stringify(geoData)}`);
+          
+          if (!geoData || geoData.length === 0) {
+            console.error(`Could not find location data for ${cleanLocation}`);
+            return `Could not find location data for ${cleanLocation}. Please try with a more specific location.`;
+          }
+          
+          // Extract location info from geocoding response
           const { lat, lon, name, country } = geoData[0];
+          console.log(`Found location: ${name}, ${country} at coordinates: ${lat}, ${lon}`);
+          
+          // Then get the actual weather data using coordinates
           const weatherUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${apiKey}&lang=es`;
+          console.log(`Calling weather API for: ${name}, ${country}`);
+          
+          // Fetch weather data
           const weatherRes = await fetch(weatherUrl);
+          
+          // Check for HTTP errors
+          if (!weatherRes.ok) {
+            console.error(`Weather API error: HTTP ${weatherRes.status} - ${weatherRes.statusText}`);
+            const errorText = await weatherRes.text();
+            console.error(`Response body: ${errorText}`);
+            return `Failed to fetch weather. API returned error ${weatherRes.status}.`;
+          }
+          
+          // Parse the response
           const weatherData = await weatherRes.json();
-          if (!weatherRes.ok) return `Failed to fetch weather. Error: ${weatherData.message || 'Unknown'}`;
+          console.log(`Weather API response status: ${weatherRes.status}, data:`, weatherData);
+          
+          // Extract weather data
           const { temp, feels_like, humidity } = weatherData.main;
-          return `Current weather in ${name}, ${country}: ${weatherData.weather[0].description}. Temp: ${temp}°C (feels like ${feels_like}°C). Humidity: ${humidity}%.`;
-        } catch (error) { return `An error occurred while fetching weather for ${location}.`; }
+          const description = weatherData.weather[0].description;
+          const windSpeed = weatherData.wind?.speed || 'N/A';
+          
+          console.log(`Successfully retrieved weather for ${name}, ${country}`);
+          
+          // Return formatted weather information
+          return `Current weather in ${name}, ${country}: ${description}. Temp: ${temp}°C (feels like ${feels_like}°C). Humidity: ${humidity}%. Wind speed: ${windSpeed} m/s.`;
+        } catch (error) { 
+          console.error(`Error in openWeatherMapTool: ${error.message}`, error);
+          return `An error occurred while fetching weather for ${cleanLocation}. Please try again with a more specific location.`; 
+        }
       },
     });
 
@@ -273,8 +360,277 @@ export class LangChainService {
         name: 'open_weather_map',
         description: openWeatherMapTool.description,
         handle: async (input, context, callAgent) => {
-          const result = await openWeatherMapTool.func({ location: input }, context);
-          return { output: result, confidence: 0.9 };
+          console.log(`open_weather_map agent handling: "${input}" with context:`, context);
+          try {
+            // Make sure we're getting the location correctly
+            if (!input || input.trim().length === 0) {
+              return { 
+                output: "I need a specific location to check the weather. For example, try 'What's the weather in New York?' or 'Weather in Tokyo'.",
+                confidence: 0.5
+              };
+            }
+            
+            // Make sure context has sessionId
+            const sessionId = context?.userId || context?.configurable?.sessionId || context?.metadata?.sessionId;
+            console.log(`Using sessionId for weather: ${sessionId}`);
+            
+            // Debug API key presence
+            const apiKey = this.configService.get<string>('OPENWEATHER_API_KEY');
+            if (!apiKey) {
+              console.error("OpenWeatherMap API key is missing from configuration");
+            } else {
+              console.log(`OpenWeatherMap API key is present: ${apiKey.substring(0, 4)}...`);
+            }
+            
+            // Add additional debugging for the location
+            console.log(`Calling OpenWeatherMap API with location: "${input}"`);
+            
+            const result = await openWeatherMapTool.func({ location: input }, {
+              ...context,
+              configurable: {
+                ...(context?.configurable || {}),
+                sessionId
+              },
+              metadata: {
+                ...(context?.metadata || {}),
+                sessionId
+              }
+            });
+            
+            console.log(`Weather result for ${input}: ${result.substring(0, 100)}...`);
+            
+            // Check if result indicates an error
+            if (result.includes("Could not find location data") ||
+                result.includes("API key is missing") || 
+                result.includes("Failed to fetch weather") ||
+                result.includes("An error occurred")) {
+              console.warn(`OpenWeatherMap returned error: ${result}`);
+              return { output: result, confidence: 0.5 };
+            }
+            
+            return { output: result, confidence: 0.95 };
+          } catch (error) {
+            console.error(`Error in open_weather_map agent: ${error.message}`);
+            return { 
+              output: `Failed to get weather information for "${input}". Please try again with a specific city name.`,
+              confidence: 0.5
+            };
+          }
+        }
+      });
+    }
+    
+    // Register the research agent if it doesn't exist
+    if (!AgentRegistry.getAgent('research')) {
+      AgentRegistry.register({
+        name: 'research',
+        description: 'An agent specialized in web research and information retrieval',
+        handle: async (input, context, callAgent) => {
+          try {
+            console.log(`research agent handling: "${input.substring(0, 50)}..."`);
+            
+            // Create a properly bound version of callAgent for any chained calls
+            const boundCallAgent = AgentRegistry.callAgent.bind(AgentRegistry);
+            
+            // Use the research agent executor
+            const result = await researchAgent.invoke({
+              input: input,
+              chat_history: context.chatHistory || []
+            }, {
+              ...context,
+              configurable: {
+                ...(context?.configurable || {}),
+                sessionId: context.sessionId || context.userId
+              },
+              metadata: {
+                ...(context?.metadata || {}),
+                sessionId: context.sessionId || context.userId
+              }
+            });
+            
+            return { 
+              output: typeof result === 'string' ? result : result.output, 
+              confidence: 0.75
+            };
+          } catch (error) {
+            console.error(`Error in research agent: ${error.message}`, error.stack);
+            return { 
+              output: `I'm sorry, I encountered an error while researching your request.`,
+              confidence: 0.5
+            };
+          }
+        }
+      });
+    }
+    
+    // Register the document_search agent if it doesn't exist
+    if (!AgentRegistry.getAgent('document_search')) {
+      AgentRegistry.register({
+        name: 'document_search',
+        description: 'An agent specialized in searching and retrieving information from uploaded documents',
+        handle: async (input, context, callAgent) => {
+          try {
+            console.log(`document_search agent handling: "${input.substring(0, 50)}..."`);
+            
+            // Create a properly bound version of callAgent for any chained calls
+            const boundCallAgent = AgentRegistry.callAgent.bind(AgentRegistry);
+            
+            // Use the document agent executor
+            const result = await documentAgent.invoke({
+              input: input,
+              chat_history: context.chatHistory || []
+            }, {
+              ...context,
+              configurable: {
+                ...(context?.configurable || {}),
+                sessionId: context.sessionId || context.userId
+              },
+              metadata: {
+                ...(context?.metadata || {}),
+                sessionId: context.sessionId || context.userId
+              }
+            });
+            
+            return { 
+              output: typeof result === 'string' ? result : result.output, 
+              confidence: 0.8
+            };
+          } catch (error) {
+            console.error(`Error in document_search agent: ${error.message}`, error.stack);
+            return { 
+              output: `I'm sorry, I encountered an error while searching your documents.`,
+              confidence: 0.5
+            };
+          }
+        }
+      });
+    }
+    
+    // Register the time agent if it doesn't exist
+    if (!AgentRegistry.getAgent('time')) {
+      AgentRegistry.register({
+        name: 'time',
+        description: 'An agent specialized in providing current time and date information',
+        handle: async (input, context, callAgent) => {
+          try {
+            console.log(`time agent handling: "${input.substring(0, 50)}..."`);
+            
+            // Create a properly bound version of callAgent for any chained calls
+            const boundCallAgent = AgentRegistry.callAgent.bind(AgentRegistry);
+            
+            // Use the time agent executor
+            const result = await timeAgent.invoke({
+              input: input,
+              chat_history: context.chatHistory || []
+            }, {
+              ...context,
+              configurable: {
+                ...(context?.configurable || {}),
+                sessionId: context.sessionId || context.userId
+              },
+              metadata: {
+                ...(context?.metadata || {}),
+                sessionId: context.sessionId || context.userId
+              }
+            });
+            
+            return { 
+              output: typeof result === 'string' ? result : result.output, 
+              confidence: 0.9
+            };
+          } catch (error) {
+            console.error(`Error in time agent: ${error.message}`, error.stack);
+            return { 
+              output: `I'm sorry, I encountered an error while processing your time request.`,
+              confidence: 0.5
+            };
+          }
+        }
+      });
+    }
+    
+    // Register the weather agent if it doesn't exist
+    if (!AgentRegistry.getAgent('weather')) {
+      AgentRegistry.register({
+        name: 'weather',
+        description: 'An agent specialized in providing weather information',
+        handle: async (input, context, callAgent) => {
+          try {
+            console.log(`weather agent handling: "${input.substring(0, 50)}..."`);
+            
+            // Create a properly bound version of callAgent for any chained calls
+            const boundCallAgent = AgentRegistry.callAgent.bind(AgentRegistry);
+            
+            // Use the weather agent executor
+            const result = await weatherAgent.invoke({
+              input: input,
+              chat_history: context.chatHistory || []
+            }, {
+              ...context,
+              configurable: {
+                ...(context?.configurable || {}),
+                sessionId: context.sessionId || context.userId
+              },
+              metadata: {
+                ...(context?.metadata || {}),
+                sessionId: context.sessionId || context.userId
+              }
+            });
+            
+            return { 
+              output: typeof result === 'string' ? result : result.output, 
+              confidence: 0.85
+            };
+          } catch (error) {
+            console.error(`Error in weather agent: ${error.message}`, error.stack);
+            return { 
+              output: `I'm sorry, I encountered an error while processing your weather request.`,
+              confidence: 0.5
+            };
+          }
+        }
+      });
+    }
+    
+    // Register the general agent if it doesn't exist
+    if (!AgentRegistry.getAgent('general')) {
+      AgentRegistry.register({
+        name: 'general',
+        description: 'A general-purpose agent that can handle a wide variety of tasks',
+        handle: async (input, context, callAgent) => {
+          try {
+            console.log(`general agent handling: "${input.substring(0, 50)}..."`);
+            
+            // Create a properly bound version of callAgent for any chained calls
+            const boundCallAgent = AgentRegistry.callAgent.bind(AgentRegistry);
+            
+            // Use the general agent executor
+            const result = await generalAgent.invoke({
+              input: input,
+              chat_history: context.chatHistory || []
+            }, {
+              ...context,
+              configurable: {
+                ...(context?.configurable || {}),
+                sessionId: context.sessionId || context.userId
+              },
+              metadata: {
+                ...(context?.metadata || {}),
+                sessionId: context.sessionId || context.userId
+              }
+            });
+            
+            return { 
+              output: typeof result === 'string' ? result : result.output, 
+              confidence: 0.7 
+            };
+          } catch (error) {
+            console.error(`Error in general agent: ${error.message}`, error.stack);
+            return { 
+              output: `I'm sorry, I encountered an error while processing your request.`,
+              confidence: 0.5
+            };
+          }
         }
       });
     }
@@ -286,8 +642,16 @@ export class LangChainService {
         description: agent.description,
         schema: z.object({ input: z.string().describe("Input for the agent/skill/tool.") }),
         func: async ({ input }, context) => {
-          const result = await agent.handle(input, context, AgentRegistry.callAgent);
-          return result.output;
+          try {
+            // Create a properly bound version of callAgent
+            const boundCallAgent = AgentRegistry.callAgent.bind(AgentRegistry);
+            
+            const result = await agent.handle(input, context, boundCallAgent);
+            return result.output;
+          } catch (error) {
+            console.error(`Error in dynamic tool ${agent.name}:`, error);
+            return `Error executing ${agent.name}: ${error.message}`;
+          }
         }
       })
     );
@@ -325,13 +689,22 @@ export class LangChainService {
     // Always use the detailed RESEARCH_AGENT_PROMPT for the research agent, even with chat history
     const researchAgent = createAgentExecutor(RESEARCH_AGENT_PROMPT, 'specialized', researchTools);
     const generalAgent = createAgentExecutor(GENERAL_AGENT_PROMPT, 'general', generalTools);
-    const documentAgent = createAgentExecutor(DOCUMENT_AGENT_PROMPT, 'specialized', documentTools);
-
-    // This is our main runnable. It's a single Lambda that contains all the logic.
+    const documentAgent = createAgentExecutor(DOCUMENT_AGENT_PROMPT, 'specialized', documentTools);      // This is our main runnable. It's a single Lambda that contains all the logic.
     const finalRunnable = new RunnableLambda({
       func: async (input: { input: string; chat_history: BaseMessage[] }, config?: any) => {
         const lowerCaseInput = input.input.toLowerCase();
         const lastAIMessage = input.chat_history.filter(m => m._getType() === 'ai').slice(-1)[0]?.content.toString().toLowerCase() ?? "";
+
+        // Extract session ID from config for consistent tracking
+        const sessionId = (config as any)?.configurable?.sessionId || 
+                        (config as any)?.metadata?.sessionId || 
+                        (config as any)?.userId;
+        
+        if (sessionId) {
+          console.log(`Processing message for session ${sessionId} with ${input.chat_history.length} history messages`);
+        } else {
+          console.warn('No session ID found in context, message history may not work properly');
+        }
 
         const timeKeywords = [
           'hora', 'time', 'fecha', 'date', 'día', 'dia',
@@ -378,95 +751,147 @@ export class LangChainService {
           "where can i have fun", "donde lo puedo pasar bien", "donde puedo divertirme", "donde puedo pasarla bien", "donde puedo disfrujar", "donde puedo salir", "donde puedo entretenerme", "donde puedo encontrar"
         ];
 
-        let selectedAgent: AgentExecutor;
-
         // Check for code blocks (```code```) - if found, use code interpreter through agent registry
         const hasCodeBlocks = /```[\s\S]*?```/.test(input.input);
         
-        // Enhanced routing logic with agent registry integration
-        if (hasCodeBlocks) {
-          // Code interpretation via agent registry - this will automatically handle contextual search
-          try {
-            const codeResult = await AgentRegistry.callAgent('code_interpreter', input.input, {
-              userId: (config as any)?.configurable?.sessionId,
-              ...config
-            });
-            return { output: codeResult.output };
-          } catch (error) {
-            // Fallback to research agent if code interpreter fails
+        // Set up consistent context with session ID for agent registry calls
+        // Ensure we're passing the sessionId consistently in all places
+        const agentContext = {
+          userId: sessionId,
+          sessionId: sessionId,
+          chatHistory: input.chat_history,
+          configurable: {
+            ...(config?.configurable || {}),
+            sessionId: sessionId
+          },
+          metadata: {
+            ...(config?.metadata || {}),
+            sessionId: sessionId
+          },
+          ...config
+        };
+        
+        // Log the context we're using for debugging
+        console.log(`Agent context keys: ${Object.keys(agentContext).join(', ')}`);
+        console.log(`Using session ID: ${sessionId}`);
+        
+        // Use a fully language-agnostic approach by considering all available agents
+        // Let the LLM and confidence scores determine the best agent for the task
+        
+        // Get all registered agents from AgentRegistry
+        const allRegisteredAgents = AgentRegistry.getAllAgents().map(agent => agent.name);
+        console.log(`Found ${allRegisteredAgents.length} registered agents: ${allRegisteredAgents.join(', ')}`);
+        
+        // Start with a comprehensive set of agents to consider
+        let agentsToConsider: string[] = [
+          'general', // Always include general as a baseline
+          ...allRegisteredAgents.filter(name => name !== 'general') // Add all other registered agents
+        ];
+        
+        // Remove duplicate entries if any exist
+        agentsToConsider = [...new Set(agentsToConsider)];
+        
+        // Check only for code blocks as this is a technical characteristic, not linguistic
+        if (hasCodeBlocks && !agentsToConsider.includes('code_interpreter')) {
+          console.log('Code blocks detected in input');
+          if (agentsToConsider.indexOf('general') > 0) {
+            // Move general agent after code-related agents for code blocks
+            agentsToConsider = agentsToConsider.filter(name => name !== 'general');
+            agentsToConsider.push('general');
+          }
+        }
+        
+        console.log(`Language-agnostic approach: considering all agents with confidence-based routing`);
+        console.log(`Agents to consider: ${agentsToConsider.join(', ')}`);
+        
+        // For very short inputs (less than 10 characters), consider a smaller set of agents
+        // This is a performance optimization, not a linguistic assumption
+        if (input.input.trim().length < 10) {
+          console.log('Very short input detected, using a focused set of agents');
+          // For very short inputs, prioritize general conversation but let other agents have a chance too
+          const focusedAgents = ['general'];
+          
+          // Add a few key agents for short inputs but keep the list small
+          if (allRegisteredAgents.includes('weather')) focusedAgents.push('weather');
+          if (allRegisteredAgents.includes('time')) focusedAgents.push('time');
+          
+          agentsToConsider = focusedAgents;
+        }
+        
+        console.log(`Agents to consider: ${agentsToConsider.join(', ')}`);
+        
+        // We'll let the LLM models handle language detection and processing
+        // Just pass the original input without any language-specific processing
+        // This makes our system truly language-agnostic
+        
+        // We'll only enhance the context with session tracking information
+        const enhancedAgentContext = {
+          ...agentContext,
+          // Include the raw input text for the LLM to determine language
+          rawInput: input.input,
+          // Include message length as a non-linguistic feature
+          inputLength: input.input.length,
+          // Include metadata about message history
+          historyLength: input.chat_history.length
+        };
+        
+        // Capture name declarations in a language-agnostic way
+        // We'll let the LLM handle remembering names through chat history
+        // rather than trying to extract it with regex patterns
+        
+        // Always try to use the AgentOrchestrator for consistent history handling
+        try {
+          // Use AgentOrchestrator for ALL routing to ensure consistent context handling
+          console.log(`Using AgentOrchestrator to route among: ${agentsToConsider.join(', ')}`);
+          
+          const routingResult = await AgentOrchestrator.routeByConfidence(
+            agentsToConsider, 
+            input.input, 
+            enhancedAgentContext // Use the enhanced context with language info
+          );
+          
+          console.log(`AgentOrchestrator selected: ${routingResult.agent} with confidence ${routingResult.result.confidence}`);
+          
+          // If the result is from a registered agent, return it directly
+          if (routingResult && routingResult.result) {
+            return { output: routingResult.result.output };
+          }
+          
+        } catch (error) {
+          console.error(`Error with AgentOrchestrator: ${error.message}`);
+          // Continue to fallback path
+        }
+        
+        // If the orchestrator failed, fall back to direct executor usage
+        // but ensure we're still passing the consistent context
+        let selectedAgent = generalAgent; // Default
+        
+        // Find the appropriate executor based on the first agent in the list
+        if (agentsToConsider.length > 0) {
+          const agentName = agentsToConsider[0];
+          if (agentName === 'time') {
+            selectedAgent = timeAgent;
+          } else if (agentName === 'weather') {
+            selectedAgent = weatherAgent;
+          } else if (agentName === 'document_search') {
+            selectedAgent = documentAgent;
+          } else if (agentName === 'research') {
             selectedAgent = researchAgent;
           }
-        }
-        // If the input contains any document/file-related keyword, force document_search
-        else if (documentKeywords.some(k => lowerCaseInput.includes(k))) {
-          console.log(`LangChain routing: Selected DOCUMENT agent for input: "${lowerCaseInput}" (matched keywords: ${documentKeywords.filter(k => lowerCaseInput.includes(k)).join(', ')})`);
-          selectedAgent = documentAgent;
-        }
-        // If the input contains optimization keywords with code, use code-optimization agent
-        else if (optimizationKeywords.some(k => lowerCaseInput.includes(k)) && (hasCodeBlocks || codeKeywords.some(k => lowerCaseInput.includes(k)))) {
-          try {
-            const optimizationResult = await AgentRegistry.callAgent('code-optimization', input.input, {
-              userId: (config as any)?.configurable?.sessionId,
-              ...config
-            });
-            return { output: optimizationResult.output };
-          } catch (error) {
-            // Fallback to code interpreter or research agent
-            selectedAgent = codeKeywords.some(k => lowerCaseInput.includes(k)) ? researchAgent : generalAgent;
-          }
-        }
-        // If the input contains code-related keywords (without code blocks), use research with code context
-        else if (codeKeywords.some(k => lowerCaseInput.includes(k))) {
-          try {
-            // Use research agent for code-related questions without code blocks
-            const researchResult = await AgentRegistry.callAgent('research', input.input, {
-              userId: (config as any)?.configurable?.sessionId,
-              codeContext: true,
-              ...config
-            });
-            return { output: researchResult.output };
-          } catch (error) {
-            selectedAgent = researchAgent;
-          }
-        }
-        // If the input contains any time-related keyword, force time agent
-        else if (timeKeywords.some(k => lowerCaseInput.includes(k))) {
-          selectedAgent = timeAgent;
-        }
-        // If the input contains any weather-related keyword, force weather agent
-        else if (weatherKeywords.some(k => lowerCaseInput.includes(k))) {
-          selectedAgent = weatherAgent;
-        }
-        // If the input contains any research-related keyword, use research agent via registry
-        else if (researchKeywords.some(k => lowerCaseInput.includes(k))) {
-          try {
-            const researchResult = await AgentRegistry.callAgent('research', input.input, {
-              userId: (config as any)?.configurable?.sessionId,
-              ...config
-            });
-            return { output: researchResult.output };
-          } catch (error) {
-            selectedAgent = researchAgent;
-          }
-        }
-        // If the previous agent was time/weather/document, and the new input matches research keywords, use research agent
-        else if ([timeAgent, weatherAgent, documentAgent].includes((input.chat_history.slice(-1)[0] as any)?.agent) && researchKeywords.some(k => lowerCaseInput.includes(k))) {
-          selectedAgent = researchAgent;
-        }
-        else {
-          selectedAgent = generalAgent;
         }
 
-        // Try the selected agent
+        // Try the selected agent - ensure we pass both history and context correctly
+        console.log(`Falling back to direct executor: ${selectedAgent.constructor.name}`);
         let result = await selectedAgent.invoke({
           input: input.input,
           chat_history: input.chat_history
-        }, config);
+        }, enhancedAgentContext); // Pass the enhanced context with language information
 
-        // If the general agent was used and the answer is a refusal or fallback, try the research agent as a fallback
+        // If the general agent was used, check for refusal patterns and try research agent as fallback
         if (selectedAgent === generalAgent) {
           const output = typeof result === 'string' ? result : (result && typeof result.output === 'string' ? result.output : '');
-          // Expanded heuristic: If the general agent says it can't answer, try the research agent
+          
+          // Language-agnostic refusal detection by checking for common refusal patterns
           const fallbackRegex = new RegExp(
             [
               // Spanish refusals
@@ -523,25 +948,105 @@ export class LangChainService {
             ].join('|'),
             'i'
           );
-          if (output && fallbackRegex.test(output)) {
+          
+          if (output && fallbackRegex.test(output) && AgentRegistry.getAgent('research')) {
+            console.log('General agent returned refusal, trying research agent as fallback');
             result = await researchAgent.invoke({
               input: input.input,
               chat_history: input.chat_history
-            }, config);
+            }, enhancedAgentContext); // Pass the enhanced context with language information
           }
         }
+        
         return result;
       }
     });
 
     const agentWithHistory = new RunnableWithMessageHistory({
       runnable: finalRunnable,
-      getMessageHistory: (sessionId: string) => new MongoDBChatMessageHistory(this.chatSessionModel, sessionId),
+      getMessageHistory: (sessionId: string) => {
+        this.logger.log(`Creating message history for session: ${sessionId}`);
+        
+        if (!sessionId || sessionId.length < 3) {
+          this.logger.error(`Invalid session ID provided to getMessageHistory: "${sessionId}"`);
+          throw new Error(`Invalid session ID provided to message history: "${sessionId}"`);
+        }
+        
+        // Ensure we're creating a new instance of MongoDBChatMessageHistory for each call
+        // This is critical to avoid message history issues
+        const messageHistory = new MongoDBChatMessageHistory(this.chatSessionModel, sessionId);
+        
+        // Debug log the current message count to help identify issues
+        messageHistory.debugMessageCount().catch(err => {
+          this.logger.error(`Failed to debug message count: ${err.message}`);
+        });
+        
+        // Also debug the recent message content
+        messageHistory.debugRecentMessages(2).catch(err => {
+          this.logger.error(`Failed to debug recent messages: ${err.message}`);
+        });
+        
+        return messageHistory;
+      },
+      // These keys MUST match the structure expected by LangChain RunnableWithMessageHistory
+      // Make sure they match the structure used in finalRunnable.func
       inputMessagesKey: "input",
       historyMessagesKey: "chat_history",
-      outputMessagesKey: "output",
+      outputMessagesKey: "output"
     });
 
+    // Register the summarizer agent
+    if (!AgentRegistry.getAgent('summarizer')) {
+      this.logger.log('Registering summarizer agent');
+      AgentRegistry.register({
+        name: 'summarizer',
+        description: 'An agent specialized in summarizing content from various sources',
+        handle: async (input, context, callAgent) => {
+          try {
+            console.log(`summarizer agent handling input: "${input.substring(0, 50)}..."`);
+            
+            // Create a properly bound version of callAgent for any chained calls
+            const boundCallAgent = AgentRegistry.callAgent.bind(AgentRegistry);
+            
+            // Use the general agent to process the summarization request
+            // This is because summarization is a general capability
+            const result = await generalAgent.invoke({
+              input: input,
+              chat_history: context.chatHistory || []
+            }, {
+              ...context,
+              configurable: {
+                ...(context?.configurable || {}),
+                sessionId: context.sessionId || context.userId
+              },
+              metadata: {
+                ...(context?.metadata || {}),
+                sessionId: context.sessionId || context.userId
+              }
+            });
+            
+            return { 
+              output: typeof result === 'string' ? result : result.output, 
+              confidence: 0.8
+            };
+          } catch (error) {
+            console.error(`Error in summarizer agent: ${error.message}`, error.stack);
+            return { 
+              output: `I'm sorry, I encountered an error while summarizing the content.`,
+              confidence: 0.5
+            };
+          }
+        }
+      });
+    }
+    
+    // Verify all required agents are properly registered before returning
+    this.verifyAgentRegistrations();
+    
+    // Add a final log to confirm that we're correctly using AgentOrchestrator
+    this.logger.log(`Langchain app created with AgentOrchestrator integration for confident-based agent routing`);
+    this.logger.log(`Message history is using MongoDBChatMessageHistory for persistence`);
+    
     return agentWithHistory;
   }
 
@@ -655,5 +1160,45 @@ export class LangChainService {
     }
     
     return 0;
+  }
+
+  /**
+   * Verifies that all required agents are properly registered
+   * This is called before returning the agent with history to ensure all agents are available
+   */
+  private verifyAgentRegistrations(): void {
+    // List of required agents that must be registered
+    const requiredAgents = ['general', 'research', 'web_search', 'weather', 'time', 'document_search', 'open_weather_map', 'summarizer'];
+    
+    // Check each required agent
+    const missingAgents = requiredAgents.filter(name => !AgentRegistry.getAgent(name));
+    
+    if (missingAgents.length > 0) {
+      this.logger.warn(`Missing required agents: ${missingAgents.join(', ')}`);
+      
+      // Register any missing agents as fallbacks that will show a nice error message
+      for (const missingAgent of missingAgents) {
+        this.logger.warn(`Registering fallback handler for missing agent: ${missingAgent}`);
+        
+        // Register a fallback agent that will show an appropriate error
+        AgentRegistry.register({
+          name: missingAgent,
+          description: `Fallback for ${missingAgent} agent`,
+          handle: async (input, context, callAgent) => {
+            this.logger.error(`Fallback handler called for missing agent: ${missingAgent}`);
+            return {
+              output: `I'm sorry, the ${missingAgent} feature is currently unavailable. Please try again later or try a different query.`,
+              confidence: 0.5
+            };
+          }
+        });
+      }
+    } else {
+      this.logger.log('All required agents are properly registered');
+    }
+    
+    // Log the final state of agent registry
+    const registeredAgents = AgentRegistry.getAllAgents().map(a => a.name);
+    this.logger.log(`Final agent registry state: ${registeredAgents.join(', ')}`);
   }
 }

@@ -30,9 +30,28 @@ export class AgentRegistry {
 
   // Utility for agent chaining: call another agent by name
   static async callAgent(name: string, input: string, context: any = {}): Promise<AgentResult> {
-    const agent = this.getAgent(name);
-    if (!agent) throw new Error(`Agent '${name}' not found`);
-    // Pass callAgent recursively for chaining
-    return agent.handle(input, context, this.callAgent.bind(this));
+    // Ensure "this" is properly bound by creating a bound version of callAgent
+    const boundCallAgent = AgentRegistry.callAgent.bind(AgentRegistry);
+    
+    // Log for debugging
+    console.log(`AgentRegistry.callAgent called for agent '${name}' with input: ${input.substring(0, 50)}...`);
+    
+    const agent = AgentRegistry.getAgent(name);
+    if (!agent) {
+      console.error(`Agent '${name}' not found in registry. Available agents: ${Array.from(AgentRegistry.agents.keys()).join(', ')}`);
+      throw new Error(`Agent '${name}' not found`);
+    }
+    
+    // Enhance context with non-linguistic metadata about the request
+    const enhancedContext = {
+      ...context,
+      // Include basic metadata that doesn't assume any specific language
+      inputLength: input.length,
+      timestamp: new Date().toISOString(),
+      agentName: name
+    };
+    
+    // Pass the explicitly bound callAgent for chaining
+    return agent.handle(input, enhancedContext, boundCallAgent);
   }
 }

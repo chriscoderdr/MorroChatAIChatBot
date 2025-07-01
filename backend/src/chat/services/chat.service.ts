@@ -5,6 +5,10 @@ import { StoredMongoMessage } from '../schemas/chat-session.schema';
 import { BaseMessage } from '@langchain/core/messages';
 import { ConfigService } from '@nestjs/config';
 import { withSessionMutex } from './session-mutex';
+import { MongoDBChatMessageHistory } from './mongodb.chat.message.history';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { ChatSession } from '../schemas/chat-session.schema';
 
 @Injectable()
 export class ChatService {
@@ -15,6 +19,7 @@ export class ChatService {
     private readonly langChainService: LangChainService,
     private readonly chatSessionRepository: ChatSessionRepository,
     private readonly configService: ConfigService,
+    @InjectModel(ChatSession.name) private chatSessionModel: Model<ChatSession>,
   ) {
     this.defaultTopic = this.configService.get<string>('CHAT_DEFAULT_TOPIC');
   }
@@ -32,15 +37,29 @@ export class ChatService {
     try {
       const agentWithHistory = await this.langChainService.createLangChainApp(this.defaultTopic);
       
+      // Ensure the session exists before invoking the agent
+      await this.getOrCreateSession(userId);
+      
+      // Debug message history count before invoking
+      const mongoHistory = new MongoDBChatMessageHistory(this.chatSessionModel, userId);
+      await mongoHistory.debugMessageCount();
+      
+      // Explicitly identify which session ID to use for message history
       const result = await agentWithHistory.invoke(
         {
           input: userMessage,
-          chat_history: [], // History is pulled automatically by the runnable
+          // Empty array here - history will be fetched from MongoDB by the RunnableWithMessageHistory
+          chat_history: [], 
         },
         {
+          // Both of these are needed - configurable for most tools and metadata for some specific tools
           configurable: {
             sessionId: userId,
           },
+          // Add metadata for agent registry tools
+          metadata: {
+            sessionId: userId,
+          }
         }
       );
 
