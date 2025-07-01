@@ -10,6 +10,7 @@ import { ChatHistoryError } from './components/chat/chat-history-error';
 import { useChatMutation } from './hooks/useChatMutation';
 import { useUploadPdfMutation } from './hooks/useUploadPdfMutation';
 import { useChatHistory } from './hooks/useChatHistory';
+import { formatPdfUploadMessage } from './utils/pdf-utils';
 import { isCodingRelated } from './utils/coding-detection';
 
 
@@ -60,7 +61,7 @@ function App() {
       if (prev.length === 0 && !message) {
         return [
           {
-            text: `[PDF Uploaded] ${file.name}`,
+            text: formatPdfUploadMessage(undefined, { fileName: file.name }),
             isUser: true,
             messageId: `file-${Date.now()}`,
             isCodingRelated: false
@@ -88,7 +89,7 @@ function App() {
             ...((prev.length === 0 || (prev.length === 1 && prev[0].text.startsWith('[PDF Uploaded]'))) && !message
               ? []
               : [{
-                text: `${message ? message + ' ' : ''}[PDF Uploaded] ${file.name}`,
+                text: formatPdfUploadMessage(message, { fileName: file.name }),
                 isUser: true,
                 messageId: `file-${Date.now()}`,
                 isCodingRelated: isMessageCodingRelated
