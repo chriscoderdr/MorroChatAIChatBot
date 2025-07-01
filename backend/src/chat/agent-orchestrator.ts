@@ -40,24 +40,55 @@ export class AgentOrchestrator {
     }
     
     // Heavy penalty for responses claiming no access to information when it's likely available
-    // This especially penalizes time/general agents claiming they can't help on news topics
-    if ((responseStr.includes("cannot directly access") ||
-         responseStr.includes("sorry, I don't have access") ||
-         responseStr.includes("no tengo acceso") ||
-         responseStr.includes("no tengo información") ||
-         responseStr.includes("mis conocimientos son limitados") ||
-         responseStr.includes("I don't have information about") ||
-         responseStr.includes("I don't have current information")) && 
-        (input.includes("noticias") || 
-         input.includes("news") || 
-         input.includes("recent") || 
-         input.includes("latest") || 
-         input.includes("reciente") ||
-         input.includes("ultimo") ||
-         input.match(/\b202[0-5]\b/) || // Contains a year like 2020-2025
-         input.includes("caso") || 
-         input.includes("case"))) {
-      completenessScore -= 0.7; // Much stronger penalty for claiming no access on news topics
+    // This especially penalizes time/general agents claiming they can't help on topics they shouldn't handle
+    if (responseStr.includes("cannot directly access") ||
+        responseStr.includes("sorry, I don't have access") ||
+        responseStr.includes("no tengo acceso") ||
+        responseStr.includes("no tengo información") ||
+        responseStr.includes("mis conocimientos son limitados") ||
+        responseStr.includes("I don't have information about") ||
+        responseStr.includes("necesito más información") ||
+        responseStr.includes("I need more information") ||
+        responseStr.includes("I don't have current information") ||
+        responseStr.includes("Lo siento, no tengo información")) {
+      
+      // Check if this is a query about news, companies, or factual information
+      const isNewsQuery = input.includes("noticias") || 
+                          input.includes("news") || 
+                          input.includes("recent") || 
+                          input.includes("latest") || 
+                          input.includes("reciente") ||
+                          input.includes("ultimo") ||
+                          input.match(/\b202[0-5]\b/) || // Contains a year like 2020-2025
+                          input.includes("caso") || 
+                          input.includes("case");
+      
+      // Check if this is about a company or organization
+      const isCompanyQuery = input.includes("company") ||
+                            input.includes("empresa") ||
+                            input.includes("compañía") ||
+                            input.includes("organización") ||
+                            input.includes("organization") ||
+                            input.includes("business") ||
+                            input.includes("founder") ||
+                            input.includes("fundador") ||
+                            input.includes("founded") ||
+                            input.includes("fundó") ||
+                            input.includes("fundada") ||
+                            input.includes("created") ||
+                            input.includes("creada") ||
+                            input.includes("GBH") || // Specific company mentioned in logs
+                            input.includes("Inc") ||
+                            input.includes("LLC") ||
+                            input.includes("Corp") ||
+                            input.includes("SA");
+      
+      // Apply strong penalty if the response claims no info on these topics
+      if (isNewsQuery || isCompanyQuery) {
+        completenessScore -= 0.8; // Even stronger penalty for claiming no access on these topics
+      } else {
+        completenessScore -= 0.4; // Standard penalty for "no info" responses on other topics
+      }
     }
     
     // Check for special conversational indicators with stronger bonus
@@ -219,6 +250,21 @@ export class AgentOrchestrator {
 Available agents:
 ${availableAgents.map(agent => `- ${agent}: ${this.getAgentDescription(agent)}`).join('\n')}
 
+IMPORTANT ROUTING RULES:
+1. For ANY queries about companies, businesses, organizations, products, or people (including their founding, creation, history):
+   - ALWAYS route to 'research' agent if available
+   - NEVER route to 'time', 'current_time', or 'weather' for these queries
+
+2. For factual questions that require up-to-date information or current events:
+   - ALWAYS route to 'research' agent if available
+   - NEVER route to 'time' or 'current_time' for these queries
+
+3. For queries that explicitly ask for the time or date:
+   - Route to 'time' or 'current_time'
+
+4. For simple greetings or general conversation:
+   - Route to 'general'
+
 Based on the query, respond with a JSON object containing:
 1. "agentName": The name of the most appropriate agent from the available list
 2. "confidence": A number between 0-1 representing your confidence in this selection
@@ -272,11 +318,8 @@ Only respond with the JSON object, nothing else.`;
         if (type === 'time' && availableAgents.includes('time')) {
           return { agentName: 'time', confidence: 0.7 };
         }
-        if (type === 'news' && availableAgents.includes('web_search')) {
-          return { agentName: 'web_search', confidence: 0.7 };
-        }
-        if (type === 'factual' && availableAgents.includes('research')) {
-          return { agentName: 'research', confidence: 0.7 };
+        if ((type === 'news' || type === 'factual') && availableAgents.includes('research')) {
+          return { agentName: 'research', confidence: 0.8 }; // Higher confidence for research
         }
       }
       
@@ -298,8 +341,8 @@ Only respond with the JSON object, nothing else.`;
   private static getAgentDescription(agentName: string): string {
     const descriptions: Record<string, string> = {
       'general': 'A general-purpose conversational agent that can handle a wide range of topics but has limited access to specific or real-time information.',
-      'web_search': 'Specializes in finding current information, news articles, and recent events by searching the web.',
-      'research': 'Focuses on providing detailed factual information about companies, people, historical events, and other knowledge-based topics.',
+      'web_search': 'Specializes in finding current information, news articles, and recent events by searching the web. NOTE: The research agent is preferred over this one.',
+      'research': 'Focuses on providing detailed factual information by searching the web and analyzing results. Handles company information, news, recent events, people, historical events, and other knowledge-based topics. This is the preferred agent for all factual queries.',
       'time': 'Provides current time, date, and timezone information.',
       'current_time': 'Provides current time, date, and timezone information.',
       'weather': 'Provides weather forecasts and current conditions for specific locations.',
@@ -361,14 +404,8 @@ Only respond with the JSON object, nothing else.`;
         agentsToRun = [prediction.agentName];
         
         // Add appropriate backup agents based on query type
-        if (queryTypes.includes('news')) {
-          if (prediction.agentName !== 'web_search' && agentNames.includes('web_search')) {
-            agentsToRun.push('web_search');
-          }
-          if (prediction.agentName !== 'research' && agentNames.includes('research')) {
-            agentsToRun.push('research');
-          }
-        } else if (queryTypes.includes('factual')) {
+        if (queryTypes.includes('news') || queryTypes.includes('factual')) {
+          // Always prefer research for news and factual queries
           if (prediction.agentName !== 'research' && agentNames.includes('research')) {
             agentsToRun.push('research');
           }
@@ -384,19 +421,28 @@ Only respond with the JSON object, nothing else.`;
         }
         
         console.log(`Medium confidence prediction, running selected agents: ${agentsToRun.join(', ')}`);
-      } else {
-        // For low confidence, use our previous filtering logic
-        agentsToRun = [...agentNames];
-        
-        // For news/current events queries, exclude time agent unless specifically time-related
-        if ((queryTypes.includes('news') || queryTypes.includes('factual')) && !queryTypes.includes('time')) {
-          const timeAgentNames = ['time', 'current_time'];
-          // Only filter out time agents if we have better alternatives
-          if (agentsToRun.some(name => ['web_search', 'research'].includes(name))) {
-            agentsToRun = agentsToRun.filter(name => !timeAgentNames.includes(name));
-            console.log(`Filtered out time agents for news/factual query, using: ${agentsToRun.join(', ')}`);
-          }
+      } else {      // For low confidence, use our previous filtering logic
+      agentsToRun = [...agentNames];
+      
+      // Check if this is a company-related query
+      const isCompanyQuery = this.isCompanyRelatedQuery(input);
+      
+      // For news/current events queries or company-related queries, exclude time agent
+      if (((queryTypes.includes('news') || queryTypes.includes('factual')) && !queryTypes.includes('time')) || 
+          isCompanyQuery) {
+        const timeAgentNames = ['time', 'current_time'];
+        // Also filter out web_search if research is available
+        let agentsToFilter = [...timeAgentNames];
+        if (agentsToRun.includes('research') && agentsToRun.includes('web_search')) {
+          agentsToFilter.push('web_search');
         }
+        
+        // Only filter out agents if we have research as an alternative
+        if (agentsToRun.includes('research')) {
+          agentsToRun = agentsToRun.filter(name => !agentsToFilter.includes(name));
+          console.log(`Filtered out time/web_search agents for ${isCompanyQuery ? 'company' : 'news/factual'} query, using: ${agentsToRun.join(', ')}`);
+        }
+      }
         
         // Prioritize predicted agent by running it first in the list
         if (agentsToRun.includes(prediction.agentName)) {
@@ -515,18 +561,44 @@ Only respond with the JSON object, nothing else.`;
         }
       }
       
+      // Check if this is a company-related query that needs special handling
+      const isCompanyQuery = this.isCompanyRelatedQuery(input);
+      if (isCompanyQuery) {
+        console.log("Detected company-related query, giving preference to research agent");
+        
+        // Only try research agent for company queries (not web_search)
+        if (completenessScores.some(c => c.name === 'research')) {
+          const researchScore = completenessScores.find(c => c.name === 'research')!;
+          // Use research if it has a decent response
+          if (researchScore.completeness >= 0.6) {
+            console.log(`Selected research agent for company query with completeness: ${researchScore.completeness.toFixed(2)}`);
+            return {
+              agent: 'research',
+              result: researchScore.result,
+              all: allResults
+            };
+          }
+        }
+      }
+      
       // Give priority to the predicted agent if its response is good enough
       if (prediction.confidence >= 0.65 && completenessScores.some(c => c.name === prediction.agentName)) {
         const predictedAgentScore = completenessScores.find(c => c.name === prediction.agentName)!;
         
-        // Use predicted agent if its completeness score is reasonable
-        if (predictedAgentScore.completeness >= 0.65) {
-          console.log(`Using LLM-predicted agent ${prediction.agentName} with completeness: ${predictedAgentScore.completeness.toFixed(2)}`);
-          return {
-            agent: prediction.agentName,
-            result: predictedAgentScore.result,
-            all: allResults
-          };
+        // For time/current_time agents, only use if it's actually a time query
+        const isTimeAgent = prediction.agentName === 'time' || prediction.agentName === 'current_time';
+        if (isTimeAgent && isCompanyQuery) {
+          console.log(`Rejecting time agent for company-related query despite high confidence`);
+        } else {
+          // Use predicted agent if its completeness score is reasonable
+          if (predictedAgentScore.completeness >= 0.65) {
+            console.log(`Using LLM-predicted agent ${prediction.agentName} with completeness: ${predictedAgentScore.completeness.toFixed(2)}`);
+            return {
+              agent: prediction.agentName,
+              result: predictedAgentScore.result,
+              all: allResults
+            };
+          }
         }
       }
       
@@ -545,16 +617,16 @@ Only respond with the JSON object, nothing else.`;
         }
       }
       
-      // Special handling for web_search agent for news queries
-      if (queryTypes.includes('news') && completenessScores.some(c => c.name === 'web_search')) {
-        const webSearchScore = completenessScores.find(c => c.name === 'web_search')!;
+      // Special handling for news queries - always prefer research agent
+      if (queryTypes.includes('news') && completenessScores.some(c => c.name === 'research')) {
+        const researchScore = completenessScores.find(c => c.name === 'research')!;
         
-        // For news queries, prefer web_search if it's reasonably complete
-        if (webSearchScore.completeness >= 0.6) {
-          console.log(`Selected web_search agent for news query with completeness: ${webSearchScore.completeness.toFixed(2)}`);
+        // For news queries, prefer research if it's reasonably complete
+        if (researchScore.completeness >= 0.6) {
+          console.log(`Selected research agent for news query with completeness: ${researchScore.completeness.toFixed(2)}`);
           return {
-            agent: 'web_search',
-            result: webSearchScore.result,
+            agent: 'research',
+            result: researchScore.result,
             all: allResults
           };
         }
@@ -647,6 +719,59 @@ Only respond with the JSON object, nothing else.`;
   }
 
   // Helper method to detect if a query is a fact-based follow-up
+  // Detect if a query is related to companies, organizations, or businesses
+  private static isCompanyRelatedQuery(input: string): boolean {
+    const lowercaseInput = input.toLowerCase();
+    
+    // Check for company-related keywords
+    const companyKeywords = [
+      'company', 'empresa', 'compañía', 'organización', 'organization',
+      'business', 'negocio', 'corporation', 'corporación', 'inc', 'llc',
+      'founder', 'fundador', 'founded', 'fundó', 'fundada', 'created',
+      'creada', 'established', 'establecida', 'ceo', 'president', 'presidente',
+      'headquarters', 'sede', 'based in', 'ubicada en', 'industry', 'industria',
+      'product', 'producto', 'service', 'servicio', 'employee', 'empleado',
+      'market', 'mercado', 'revenue', 'ingreso', 'profit', 'beneficio',
+      'startup', 'brand', 'marca', 'director', 'founder', 'fundador'
+    ];
+    
+    // Check if any company keywords are in the input
+    if (companyKeywords.some(keyword => lowercaseInput.includes(keyword))) {
+      return true;
+    }
+    
+    // Check for patterns that look like company queries
+    // E.g., "Who founded X", "When was X founded", etc.
+    const companyPatterns = [
+      /who (founded|created|started|established|owns|runs)/i,
+      /when was .{3,50} (founded|created|started|established)/i,
+      /where is .{3,50} (located|based|headquartered)/i,
+      /what (does|is) .{3,50} (do|make|sell|offer)/i,
+      /quién (fundó|creó|estableció|inició)/i,
+      /cuándo (se fundó|fue fundada|se creó|fue creada|se estableció)/i,
+      /dónde (está ubicada|se encuentra|tiene su sede)/i
+    ];
+    
+    if (companyPatterns.some(pattern => input.match(pattern))) {
+      return true;
+    }
+    
+    // Check for company names in the input (common naming patterns)
+    // This helps catch "What is Soluciones GBH" type queries
+    const companyNamePatterns = [
+      /\b[A-Z][a-z]+ (Inc|LLC|Corp|Company|Corporation|Group)\b/,
+      /\b[A-Z][a-z]+ & [A-Z][a-z]+\b/, // Like "Johnson & Johnson"
+      /\b[A-Z]{2,5}\b/, // Acronyms like "IBM", "GBH"
+      /\bSoluciones GBH\b/i // Specific company mentioned in logs
+    ];
+    
+    if (companyNamePatterns.some(pattern => input.match(pattern))) {
+      return true;
+    }
+    
+    return false;
+  }
+  
   private static isFactualFollowUpQuery(input: string, contextHistory: string[] = []): boolean {
     if (input.length > 35) return false; // Follow-up questions tend to be short
     
