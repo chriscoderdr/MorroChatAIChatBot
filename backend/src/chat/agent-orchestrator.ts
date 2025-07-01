@@ -88,9 +88,9 @@ export class AgentOrchestrator {
   private static async predictBestAgent(input: string, availableAgents: string[], context: any = {}): Promise<{ agentName: string, confidence: number }> {
     console.log('Starting pure LLM-based agent prediction');
     
-    const generalAgent = AgentRegistry.getAgent('general');
-    if (!generalAgent) {
-      console.warn('General agent not available for agent prediction, using fallback');
+    const routingAgent = AgentRegistry.getAgent('routing');
+    if (!routingAgent) {
+      console.warn('Routing agent not available for agent prediction, using fallback');
       return { 
         agentName: availableAgents.includes('research') ? 'research' : 
                   availableAgents.includes('general') ? 'general' : availableAgents[0], 
@@ -98,37 +98,60 @@ export class AgentOrchestrator {
       };
     }
 
-    // Create a focused system prompt that forces JSON-only responses
-    const systemPrompt = `You are a routing system. Your ONLY job is to analyze user queries and return a JSON object to route them to the correct agent.
+    const hasDocuments = this.hasDocumentContext(context);
 
-Available agents:
+    // Create a focused system prompt that forces JSON-only responses
+    const systemPrompt = `You are a strict JSON routing API. You MUST respond with ONLY a JSON object, no other text.
+
+AVAILABLE AGENTS:
 ${availableAgents.map(agent => `- ${agent}: ${this.getAgentDescription(agent)}`).join('\n')}
 
-User query: "${input}"
-${context.chatHistory && context.chatHistory.length > 0 ? `\nRecent conversation context: ${context.chatHistory.slice(-2).map((msg: any) => `${msg.type}: ${msg.content}`).join(', ')}` : ''}
+USER QUERY: "${input}"
+${context.chatHistory && context.chatHistory.length > 0 ? `\nCONTEXT: ${context.chatHistory.slice(-2).map((msg: any) => `${msg.type}: ${msg.content}`).join(', ')}` : ''}
+${hasDocuments ? '\n⚠️  DOCUMENT CONTEXT DETECTED: User has uploaded documents in this session. For ambiguous queries without clear subject, prefer document_search agent.' : ''}
 
-ROUTING RULES:
-- Time queries (hora, time, current time) → time or current_time agents
-- Weather queries (clima, weather, temperature) → open_weather_map or weather agents  
-- Document questions (about documents, uploaded files) → document_search agent
-- Company/research questions → research agent
+CRITICAL ROUTING RULES:
+- "hora", "time", "día", "dia", "date", "fecha", "what day", "que dia", "hoy", "today" → time agent (intelligent time agent with multilingual support)
+- "clima", "weather", "temperature", "temperatura", "tiempo", "forecast", "pronóstico" → open_weather_map or weather agents  
+- "document", "archivo", "documento", "trata", "uploaded file", "de que trata", "what is this about", "que dice", "details", "content", "summary" → document_search agent
+- Company info, people, research queries → research agent
 - Code questions → code_interpreter agent
-- General conversation → general agent
+- **AMBIGUOUS QUERIES**: If the query is vague, unclear, or doesn't specify a subject (like "what is this?", "tell me about it", "what does it say?", "explain this", "details", "summary"), AND documents are available in context → document_search agent
+- Everything else → general agent
 
-Return ONLY this JSON format:
-{"agentName": "agent_name", "confidence": 0.85, "reasoning": "why this agent"}
+MANDATORY RESPONSE FORMAT (NO OTHER TEXT ALLOWED):
+{"agentName": "agent_name", "confidence": 0.85, "reasoning": "brief reason"}
 
-NO other text, explanations, or markdown. ONLY the JSON object.`;
+RESPOND WITH ONLY THE JSON OBJECT. NO MARKDOWN, NO EXPLANATIONS, NO OTHER TEXT.`;
 
     try {
       const boundCallAgent = AgentRegistry.callAgent.bind(AgentRegistry);
-      const result = await generalAgent.handle(
+      const result = await routingAgent.handle(
         input,
-        { ...context, systemPrompt },
+        { 
+          ...context, 
+          systemPrompt,
+          availableAgents,
+          // Routing-specific parameters
+          temperature: 0.1,
+          maxTokens: 200,
+          responseFormat: 'json'
+        },
         boundCallAgent
       );
 
-      console.log(`Raw LLM prediction response: ${result.output}`);
+      console.log(`Raw routing agent response: ${result.output}`);
+
+      // Check if the routing agent returned an error
+      try {
+        const errorCheck = JSON.parse(result.output);
+        if (errorCheck.error === 'routing_failed') {
+          console.error('Routing agent returned error:', errorCheck.message);
+          throw new Error(errorCheck.message);
+        }
+      } catch (e) {
+        // Not an error JSON, continue with normal processing
+      }
 
       // Try multiple JSON extraction approaches
       let jsonData: any = null;
@@ -183,58 +206,112 @@ NO other text, explanations, or markdown. ONLY the JSON object.`;
 
       if (jsonData && jsonData.agentName && typeof jsonData.confidence === 'number') {
         if (availableAgents.includes(jsonData.agentName)) {
-          console.log(`LLM predicted agent: ${jsonData.agentName} with confidence ${jsonData.confidence}`);
+          console.log(`Routing agent predicted: ${jsonData.agentName} with confidence ${jsonData.confidence}`);
           console.log(`Reasoning: ${jsonData.reasoning || 'Not provided'}`);
           return {
             agentName: jsonData.agentName,
             confidence: jsonData.confidence
           };
         } else {
-          console.warn(`LLM predicted agent ${jsonData.agentName} not in available agents`);
+          console.warn(`Routing agent predicted agent ${jsonData.agentName} not in available agents`);
         }
       } else {
         console.error('Invalid prediction format:', jsonData);
       }
     } catch (error) {
-      console.error('Error in LLM prediction:', error);
+      console.error('Error in routing agent prediction:', error);
     }
 
-    // Fallback when LLM prediction fails
-    console.log('LLM prediction failed, using intelligent fallback');
+    // Fallback when routing agent prediction fails
+    console.log('Routing agent prediction failed, using intelligent fallback');
+    
+    // Check for document context in chat history
+    const hasDocsInFallback = this.hasDocumentContext(context);
     
     // Smart fallback based on input content
     const inputLower = input.toLowerCase();
     
-    if (inputLower.includes('document') || inputLower.includes('archivo') || inputLower.includes('trata')) {
-      if (availableAgents.includes('document_search')) {
-        return { agentName: 'document_search', confidence: 0.6 };
-      }
-    }
-    
-    if (inputLower.includes('time') || inputLower.includes('hora')) {
+    // Enhanced time detection (including Spanish)
+    if (inputLower.includes('time') || inputLower.includes('hora') || inputLower.includes('día') || 
+        inputLower.includes('dia') || inputLower.includes('date') || inputLower.includes('fecha') ||
+        inputLower.includes('today') || inputLower.includes('hoy') || inputLower.includes('que dia') ||
+        inputLower.includes('qué día') || inputLower.includes('what day')) {
       if (availableAgents.includes('time')) {
+        console.log('Fallback: Detected time query, routing to time agent');
         return { agentName: 'time', confidence: 0.6 };
       }
       if (availableAgents.includes('current_time')) {
+        console.log('Fallback: Detected time query, routing to current_time agent (fallback)');
         return { agentName: 'current_time', confidence: 0.6 };
       }
     }
     
-    if (inputLower.includes('weather') || inputLower.includes('clima')) {
+    // Enhanced document detection
+    if (inputLower.includes('document') || inputLower.includes('archivo') || inputLower.includes('documento') || 
+        inputLower.includes('trata') || inputLower.includes('uploaded') || inputLower.includes('what is this') ||
+        inputLower.includes('que es esto') || inputLower.includes('que dice') || inputLower.includes('what does it say') ||
+        inputLower.includes('details') || inputLower.includes('detalles') || inputLower.includes('summary') ||
+        inputLower.includes('resumen') || inputLower.includes('about this') || inputLower.includes('sobre esto') ||
+        inputLower.includes('content') || inputLower.includes('contenido') || inputLower.includes('explain this') ||
+        inputLower.includes('explica esto') || inputLower.includes('tell me about') || inputLower.includes('dime sobre')) {
+      if (availableAgents.includes('document_search')) {
+        console.log('Fallback: Detected document query, routing to document_search agent');
+        return { agentName: 'document_search', confidence: 0.6 };
+      }
+    }
+    
+    // Ambiguous query detection with document context
+    const ambiguousQueries = [
+      'this', 'esto', 'it', 'that', 'eso', 'what', 'que', 'how', 'como', 'why', 'porque',
+      'tell me', 'dime', 'explain', 'explica', 'show me', 'muestra', 'details', 'detalles'
+    ];
+    
+    const isAmbiguous = ambiguousQueries.some(term => 
+      inputLower.includes(term) && inputLower.split(' ').length <= 5
+    );
+    
+    if (isAmbiguous && hasDocsInFallback && availableAgents.includes('document_search')) {
+      console.log('Fallback: Detected ambiguous query with document context, routing to document_search agent');
+      return { agentName: 'document_search', confidence: 0.7 };
+    }
+    
+    if (inputLower.includes('weather') || inputLower.includes('clima') || inputLower.includes('temperature') || 
+        inputLower.includes('temperatura') || inputLower.includes('tiempo')) {
       if (availableAgents.includes('open_weather_map')) {
+        console.log('Fallback: Detected weather query, routing to open_weather_map agent');
         return { agentName: 'open_weather_map', confidence: 0.6 };
       }
       if (availableAgents.includes('weather')) {
+        console.log('Fallback: Detected weather query, routing to weather agent');
         return { agentName: 'weather', confidence: 0.6 };
       }
     }
     
-    // Default fallback
+    // Default fallback - prefer document_search if documents are available
+    if (hasDocsInFallback && availableAgents.includes('document_search')) {
+      console.log('Fallback: Using document_search agent due to document context');
+      return { agentName: 'document_search', confidence: 0.5 };
+    }
+    
     return {
       agentName: availableAgents.includes('research') ? 'research' : 
                 availableAgents.includes('general') ? 'general' : availableAgents[0],
       confidence: 0.5
     };
+  }
+
+  // Helper method to check if documents are available in chat context
+  private static hasDocumentContext(context: any): boolean {
+    return context.chatHistory && context.chatHistory.some((msg: any) => 
+      msg.content && (
+        msg.content.includes('[PDF Uploaded]') || 
+        msg.content.includes('[Document Uploaded]') ||
+        msg.content.includes('[File Uploaded]') ||
+        msg.content.includes('.pdf') ||
+        msg.content.includes('.docx') ||
+        msg.content.includes('.txt')
+      )
+    );
   }
 
   // Get a description of each agent for the LLM to understand its purpose
@@ -243,8 +320,8 @@ NO other text, explanations, or markdown. ONLY the JSON object.`;
       'general': 'A general-purpose conversational agent that can handle a wide range of topics but has limited access to specific or real-time information.',
       'web_search': 'Specializes in finding current information, news articles, and recent events by searching the web. NOTE: The research agent is preferred over this one.',
       'research': 'Focuses on providing detailed factual information by searching the web and analyzing results. Handles company information, news, recent events, people, historical events, and other knowledge-based topics. This is the preferred agent for all factual queries.',
-      'time': 'Provides current time, date, and timezone information.',
-      'current_time': 'Provides current time, date, and timezone information.',
+      'time': 'PREFERRED: Intelligent time agent that provides current time, date, and timezone information with multilingual support and natural language understanding.',
+      'current_time': 'DEPRECATED: Simple timezone-based time tool. Use "time" agent instead.',
       'weather': 'CRITICAL: Provides weather forecasts and current conditions for specific locations. Use this agent for ANY weather-related query including "clima", "weather", "temperature", "temperatura", "forecast", "pronóstico", etc.',
       'open_weather_map': 'CRITICAL: Provides detailed weather information using OpenWeatherMap data. PREFERRED weather agent. Use this agent for ANY weather-related query including "clima", "weather", "temperature", "temperatura", "forecast", "pronóstico", etc.',
       'document_search': 'CRITICAL: Searches through user-uploaded documents to find specific information. Use this agent for ANY query that asks about documents, uploaded files, or content within documents. This includes questions like "what is this document about?", "what details does it have?", "according to the document", etc. This agent has access to the user\'s uploaded documents.',

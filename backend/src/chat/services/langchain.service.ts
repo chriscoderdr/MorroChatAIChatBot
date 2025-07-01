@@ -376,16 +376,6 @@ Location:`;
         }
       });
     }
-    if (!AgentRegistry.getAgent('current_time')) {
-      AgentRegistry.register({
-        name: 'current_time',
-        description: currentTimeTool.description,
-        handle: async (input, context, callAgent) => {
-          const result = await currentTimeTool.func({ timezone: input }, context);
-          return { output: result, confidence: 0.9 };
-        }
-      });
-    }
     if (!AgentRegistry.getAgent('open_weather_map')) {
       AgentRegistry.register({
         name: 'open_weather_map',
