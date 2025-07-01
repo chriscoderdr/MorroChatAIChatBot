@@ -25,6 +25,13 @@ interface IMessage {
 function App() {
   const uploadPdfMutation = useUploadPdfMutation();
   const newChatMutation = useNewChatMutation();
+  const [isSidebarVisible, setIsSidebarVisible] = useState(true);
+  
+  // Handler for toggling sidebar visibility
+  const handleToggleSidebar = () => {
+    setIsSidebarVisible(prev => !prev);
+  };
+  
   // Handler for starting a new chat session
   const handleNewChat = () => {
     setMessages([]); // Clear chat history
@@ -158,6 +165,19 @@ function App() {
     }
   }, [chatHistoryQuery.data]);
 
+  // Keyboard shortcut for sidebar toggle (Ctrl/Cmd + B)
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'b') {
+        event.preventDefault();
+        handleToggleSidebar();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
 
   // Scroll to the last message when messages change
   useEffect(() => {
@@ -217,13 +237,13 @@ function App() {
     <div
       className="flex fix-viewport bg-gradient-to-br from-gray-900 to-gray-800 text-white"
     >
-      <Sidebar onNewChat={handleNewChat} />
+      {isSidebarVisible && <Sidebar onNewChat={handleNewChat} />}
       <div className="flex flex-col flex-1">
         <div
           className="sticky top-0 z-20 bg-gradient-to-br from-gray-900 to-gray-800"
         >
           <div className="flex items-center justify-between px-4 py-2">
-            <Header />
+            <Header onToggleSidebar={handleToggleSidebar} isSidebarVisible={isSidebarVisible} />
             {/* Mobile New Chat button, hidden on sm and up */}
             <button
               className="sm:hidden ml-2 px-3 py-1 rounded bg-blue-600 text-white font-semibold text-sm shadow hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400"
