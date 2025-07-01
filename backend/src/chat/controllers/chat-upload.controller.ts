@@ -32,12 +32,16 @@ export class ChatUploadController {
     const userId = req.browserSessionId;
     if (!userId) throw new Error('No user session found');
 
-    await this.pdfVectorService.vectorizeAndStorePdf(file.buffer, userId, message);
-
+    this.logger.log(`Starting PDF upload for user ${userId}. File: ${file?.originalname}, Size: ${file?.size} bytes`);
+    
+    const vectorizeResult = await this.pdfVectorService.vectorizeAndStorePdf(file.buffer, userId, message);
+    this.logger.log(`Vectorization complete. Result: ${JSON.stringify(vectorizeResult)}`);
 
     let answer: string | undefined = undefined;
     if (message) {
       try {
+        this.logger.log(`Processing user message: "${message}"`);
+        
         // Add document upload context to chat history for proper routing
         const documentContext = `[PDF Uploaded] ${file.originalname}`;
         await this.chatService.addDocumentContext(userId, documentContext);
@@ -45,6 +49,8 @@ export class ChatUploadController {
         // Now process the message through the normal chat flow with document context
         const result = await this.chatService.processChat(message, userId);
         answer = result.reply || "Document uploaded successfully. You can now ask questions about it.";
+        
+        this.logger.log(`User message processed successfully. Answer length: ${answer?.length || 0} chars`);
       } catch (err) {
         this.logger.error('Error processing document question:', err);
         answer = "Document uploaded successfully. You can now ask questions about it.";

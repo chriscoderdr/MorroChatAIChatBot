@@ -449,35 +449,76 @@ Only respond with the JSON object, nothing else.`;
       const chatHistory: string[] = [];
       if (context && context.chatHistory && Array.isArray(context.chatHistory)) {
         context.chatHistory.forEach((msg: any) => {
+          // Try multiple extraction paths for different message structures
+          let content = '';
+          
+          // Path 1: Standard MongoDB structure (msg.kwargs._doc.content)
           if (msg && msg.kwargs && msg.kwargs._doc && msg.kwargs._doc.content) {
-            chatHistory.push(msg.kwargs._doc.content);
+            content = msg.kwargs._doc.content;
+          }
+          // Path 2: LangChain structure (msg.kwargs.$__parent.data.content)
+          else if (msg && msg.kwargs && msg.kwargs.$__parent && msg.kwargs.$__parent.data && msg.kwargs.$__parent.data.content) {
+            content = msg.kwargs.$__parent.data.content;
+          }
+          // Path 3: Direct content property
+          else if (msg && msg.content) {
+            content = msg.content;
+          }
+          // Path 4: Data content property
+          else if (msg && msg.data && msg.data.content) {
+            content = msg.data.content;
+          }
+          
+          if (content && typeof content === 'string') {
+            chatHistory.push(content);
           }
         });
       }
-      
-      // Check for document context in the conversation
+
+      // Check for document context in the conversation 
       const hasDocumentContext = this.hasDocumentContextInHistory(chatHistory);
       console.log(`Document context check: hasDocumentContext=${hasDocumentContext}, chatHistory=${JSON.stringify(chatHistory)}`);
       console.log(`Is document query: ${this.isDocumentRelatedQuery(input, chatHistory)}`);
       console.log(`Available agents include document_search: ${agentNames.includes('document_search')}`);
       
+      // PRIORITY 1: If we detect document context AND document-related query, use document_search
       if (hasDocumentContext && this.isDocumentRelatedQuery(input, chatHistory) && agentNames.includes('document_search')) {
         console.log(`Detected document-related query with context: "${input}" - using document_search agent directly`);
         try {
-          // Create a properly bound version of callAgent
-          const boundCallAgent = AgentRegistry.callAgent.bind(AgentRegistry);
-          const documentAgent = AgentRegistry.getAgent('document_search');
+          const result = await this.runSingleAgent('document_search', input, context);
+          return {
+            agent: 'document_search',
+            result: result,
+            all: { 'document_search': result }
+          };
+        } catch (error) {
+          console.error('Error running document_search agent:', error);
+        }
+      }
+      
+      // PRIORITY 2: Fallback - if no chat history but query is clearly document-related, 
+      // try document_search anyway (this covers upload scenarios)
+      if (chatHistory.length <= 1 && this.isDocumentRelatedQuery(input, []) && agentNames.includes('document_search')) {
+        console.log(`No chat history but document-related query detected: "${input}" - trying document_search agent`);
+        try {
+          const result = await this.runSingleAgent('document_search', input, context);
           
-          if (documentAgent) {
-            const result = await documentAgent.handle(input, context, boundCallAgent);
+          // Only use this result if it's not an error or "no document found" type response
+          if (result && result.output && result.output.length > 50 && 
+              !result.output.includes('no document') && 
+              !result.output.includes('cannot find') &&
+              !result.output.includes('no information')) {
+            console.log(`Document search fallback succeeded for: "${input}"`);
             return {
               agent: 'document_search',
               result: result,
               all: { 'document_search': result }
             };
+          } else {
+            console.log(`Document search fallback failed or returned insufficient result, continuing with normal routing`);
           }
         } catch (error) {
-          console.error('Error running document_search agent:', error);
+          console.error('Error in document_search fallback:', error);
         }
       }
       
@@ -835,6 +876,9 @@ Only respond with the JSON object, nothing else.`;
       /what.*this.*about/i,
       /what.*document.*about/i,
       /de que.*trata/i,
+      /de qué.*trata/i,
+      /qué.*trata/i,
+      /trata.*este.*documento/i,
       /según.*documento/i,
       /according.*document/i,
       /what.*details.*it.*have/i,
@@ -847,7 +891,9 @@ Only respond with the JSON object, nothing else.`;
       /what.*says/i,
       /qué.*dice/i,
       /what.*information/i,
-      /qué.*información/i
+      /qué.*información/i,
+      /what.*is.*this/i,
+      /qué.*es.*esto/i
     ];
     
     if (documentQuestionPatterns.some(pattern => input.match(pattern))) {

@@ -27,6 +27,8 @@ export class PdfVectorService {
         });
         text = pdfData.text;
         this.logger.log(`PDF parsed successfully. Text length: ${text.length} characters`);
+        this.logger.log(`First 200 characters: "${text.substring(0, 200)}..."`);
+        this.logger.log(`Last 200 characters: "...${text.substring(Math.max(0, text.length - 200))}"`);
       } catch (pdfError) {
         this.logger.warn(`Standard PDF parsing failed: ${pdfError.message}`);
         
@@ -90,16 +92,44 @@ export class PdfVectorService {
       
       // Pre-process text to better preserve structure
       const preprocessedText = this.preprocessTextForChunking(text);
+      this.logger.log(`Text preprocessed. Original length: ${text.length}, Preprocessed length: ${preprocessedText.length}`);
+      
       let docs = await splitter.createDocuments([preprocessedText]);
+      this.logger.log(`Initial chunks created: ${docs.length}`);
 
       // Post-process chunks for better semantic coherence
       docs = this.postProcessChunks(docs);
+      this.logger.log(`After post-processing: ${docs.length} chunks`);
 
       // Filter out empty/whitespace-only chunks and very short chunks
-      docs = docs.filter(doc => {
+      const originalCount = docs.length;
+      const filteredDocs = docs.filter((doc, index) => {
         const content = doc.pageContent && doc.pageContent.trim();
-        return content && content.length > 100; // Increased minimum length for more meaningful content
+        const isValid = content && content.length > 50; // Reduced from 100 to 50 to be less restrictive
+        
+        if (!isValid) {
+          this.logger.debug(`Filtered out chunk ${index}: length=${content ? content.length : 0}, preview="${content ? content.substring(0, 50) : 'empty'}"`);
+        }
+        
+        return isValid;
       });
+      
+      docs = filteredDocs;
+      this.logger.log(`After filtering (min 50 chars): ${docs.length} chunks (filtered out ${originalCount - docs.length})`);
+      
+      // Log chunk size distribution
+      if (docs.length > 0) {
+        const chunkSizes = docs.map(doc => doc.pageContent.length);
+        const avgChunkSize = chunkSizes.reduce((a, b) => a + b, 0) / chunkSizes.length;
+        const minChunkSize = Math.min(...chunkSizes);
+        const maxChunkSize = Math.max(...chunkSizes);
+        this.logger.log(`Chunk size stats: avg=${Math.round(avgChunkSize)}, min=${minChunkSize}, max=${maxChunkSize}`);
+        
+        // Log first few chunk previews
+        docs.slice(0, 3).forEach((doc, i) => {
+          this.logger.log(`Chunk ${i} preview (${doc.pageContent.length} chars): "${doc.pageContent.substring(0, 100)}..."`);
+        });
+      }
       if (docs.length === 0) {
         this.logger.warn('No valid (non-empty) chunks found in PDF.');
         return { chunks: 0, filtered: true };
@@ -148,6 +178,9 @@ export class PdfVectorService {
         })),
         documents: validEntries.map(entry => entry.doc.pageContent),
       });
+
+      this.logger.log(`Successfully stored ${validEntries.length} chunks in ChromaDB collection: ${collectionName}`);
+      this.logger.log(`Total characters stored: ${validEntries.reduce((sum, entry) => sum + entry.doc.pageContent.length, 0)}`);
 
       return { chunks: validEntries.length, filtered: docs.length - validEntries.length };
     } catch (error) {

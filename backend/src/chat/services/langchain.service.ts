@@ -80,8 +80,8 @@ export class LangChainService {
 
     // ChromaDB document retrieval tool
     const chromaTool = new DynamicStructuredTool({
-      name: "document_search",
-      description: "Use this tool for ANY question about the user's uploaded PDF, document, or file, including questions like: 'What is the main topic of the PDF I uploaded?', 'Summarize my document', 'What does my file say about X?', 'What is the summary of the uploaded file?', 'What are the key points in my document?', 'What is the uploaded PDF about?', 'What topics are covered in my file?', 'según el documento', 'segun el documento', 'en el documento', 'el documento dice', 'menciona el documento', 'de acuerdo al documento', etc. Use this tool whenever the user refers to 'the PDF I uploaded', 'my document', 'uploaded file', 'the file', 'según el documento', 'segun el documento', 'en el documento', or similar phrases, even if the question is not directly about the file name.",
+      name: "document_search_tool",
+      description: "Searches through uploaded documents to find relevant content. This tool retrieves raw document content that should be analyzed and interpreted by the LLM.",
       schema: z.object({ question: z.string().describe("A question about the user's uploaded document, PDF, or file.") }),
       func: async ({ question }, config) => {
         // Extract sessionId from config - check multiple possible locations
@@ -331,16 +331,6 @@ export class LangChainService {
         description: searchTool.description,
         handle: async (input, context, callAgent) => {
           const result = await searchTool.func({ query: input }, context);
-          return { output: result, confidence: 0.8 };
-        }
-      });
-    }
-    if (!AgentRegistry.getAgent('document_search')) {
-      AgentRegistry.register({
-        name: 'document_search',
-        description: chromaTool.description,
-        handle: async (input, context, callAgent) => {
-          const result = await chromaTool.func({ question: input }, context);
           return { output: result, confidence: 0.8 };
         }
       });
@@ -717,16 +707,79 @@ export class LangChainService {
       
       const agentTools = documentTools;
       console.log(`createDocumentAgent: Creating agent with ${agentTools.length} tools: ${agentTools.map(t => t.name).join(', ')}`);
-      const llmWithTools = llm.bindTools ? llm.bindTools(agentTools) : llm;
       
-      const prompt = ChatPromptTemplate.fromMessages([
-        ["system", finalSystemMessage],
-        new MessagesPlaceholder("chat_history"),
-        ["human", "{input}"],
-        new MessagesPlaceholder("agent_scratchpad"),
-      ]);
-      const agent = createToolCallingAgent({ llm: llmWithTools, tools: agentTools, prompt });
-      return new AgentExecutor({ agent, tools: agentTools, verbose: true });
+      // Create a custom document agent that FORCES tool usage
+      const customDocumentAgent = new RunnableLambda({
+        func: async (input: { input: string; chat_history: BaseMessage[] }, config?: any) => {
+          console.log(`Custom Document Agent: Processing "${input.input}"`);
+          
+          // FORCE the tool call - find the document search tool
+          const documentTool = agentTools.find(tool => tool.name === 'document_search_tool');
+          if (!documentTool) {
+            throw new Error('Document search tool not found');
+          }
+          
+          // Extract session ID from config
+          const sessionId = (config as any)?.configurable?.sessionId || 
+                          (config as any)?.metadata?.sessionId || 
+                          (config as any)?.userId;
+          
+          console.log(`Forcing document_search_tool call with question: "${input.input}"`);
+          
+          try {
+            // MANDATORY tool call - force the tool to be used
+            const toolResult = await documentTool.func(
+              { question: input.input } as any, 
+              {
+                ...config,
+                configurable: {
+                  ...(config?.configurable || {}),
+                  sessionId: sessionId
+                },
+                metadata: {
+                  ...(config?.metadata || {}),
+                  sessionId: sessionId
+                }
+              }
+            );
+            
+            console.log(`Document tool returned: ${typeof toolResult === 'string' ? toolResult.substring(0, 200) + '...' : 'Non-string result'}`);
+            
+            // Now create a prompt for the LLM to analyze this content
+            const analysisPrompt = `${finalSystemMessage}
+
+DOCUMENT CONTENT FROM TOOL:
+${toolResult}
+
+USER QUESTION: ${input.input}
+
+Based on the document content above, provide a helpful answer in the same language as the user's question. Analyze and interpret the content - don't just copy it.`;
+
+            // Use the LLM to analyze the tool result - Use proper LangChain message format
+            const analysis = await llm.invoke(analysisPrompt);
+            
+            const finalAnswer = typeof analysis.content === 'string' ? analysis.content : analysis.content.toString();
+            console.log(`Document agent final answer: ${finalAnswer.substring(0, 100)}...`);
+            
+            return { output: finalAnswer };
+            
+          } catch (error) {
+            console.error(`Error in custom document agent: ${error.message}`);
+            return { 
+              output: input.input.toLowerCase().includes('spanish') || /[ñáéíóúü]/.test(input.input) 
+                ? 'Lo siento, hubo un error al buscar en el documento.' 
+                : 'Sorry, there was an error searching the document.'
+            };
+          }
+        }
+      });
+
+      // Return a fake AgentExecutor that uses our custom agent
+      return {
+        invoke: customDocumentAgent.invoke.bind(customDocumentAgent),
+        stream: customDocumentAgent.stream.bind(customDocumentAgent),
+        batch: customDocumentAgent.batch.bind(customDocumentAgent),
+      } as any;
     };
 
     const timeAgent = createAgentExecutor(TIME_AGENT_PROMPT, 'specialized', timeTools);
