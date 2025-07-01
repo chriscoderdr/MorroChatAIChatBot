@@ -1,5 +1,6 @@
 // agent-orchestrator.ts
 import { AgentRegistry, AgentHandler, AgentResult } from "./agent-registry";
+import { Logger } from '@nestjs/common';
 
 export interface AgentStep {
   agent: string; // agent name
@@ -7,27 +8,93 @@ export interface AgentStep {
 }
 
 export class AgentOrchestrator {
+  private readonly logger = new Logger(AgentOrchestrator.name);
+
   // Evaluate response completeness based on content rather than just confidence
   // This applies objective criteria that works across different agent types
-  private static evaluateResponseCompleteness(response: string, confidence: number): number {
+  private static evaluateResponseCompleteness(response: string | any, confidence: number, input: string = '', contextHistory: string[] = []): number {
     let completenessScore = 0;
     
-    // Base score from confidence
-    completenessScore += confidence * 0.6; // Up to 0.6 points from confidence
+    // Ensure response is a string
+    const responseStr = typeof response === 'string' ? response : 
+                       (response && typeof response.output === 'string') ? response.output : 
+                       (response && typeof response.toString === 'function') ? response.toString() : '';
     
-    // Length-based scoring
-    if (response.length >= 10 && response.length < 300) completenessScore += 0.2;
-    else if (response.length >= 300 && response.length < 1000) completenessScore += 0.1;
-    else if (response.length < 10) completenessScore -= 0.3;
-    else if (response.length > 1000) completenessScore -= 0.1; // Penalize very verbose answers
+    // Base score from confidence
+    completenessScore += confidence * 0.5; // Lower weight from confidence, more focus on content
+    
+    // Length-based scoring - Adjusted to better handle greeting cases
+    if (responseStr.length >= 10 && responseStr.length < 300) completenessScore += 0.2;
+    else if (responseStr.length >= 300 && responseStr.length < 1000) completenessScore += 0.3; // Favor more detailed responses
+    else if (responseStr.length < 10) completenessScore -= 0.3;
+    else if (responseStr.length > 1000) completenessScore -= 0.1; // Penalize very verbose answers
     
     // Content-based scoring - check for markers of incomplete answers
-    if (response.includes("I need to search") || 
-        response.includes("I don't have enough information") ||
-        response.includes("I need more information") ||
-        response.includes("could you clarify") ||
-        response.includes("I'd need to search")) {
+    if (responseStr.includes("I need to search") || 
+        responseStr.includes("I don't have enough information") ||
+        responseStr.includes("I need more information") ||
+        responseStr.includes("could you clarify") ||
+        responseStr.includes("I'd need to search") ||
+        responseStr.includes("NEED_MORE_SEARCH") ||
+        responseStr.includes("cannot directly access") ||
+        responseStr.includes("sorry, I don't have access")) {
       completenessScore -= 0.4;
+    }
+    
+    // Check for special conversational indicators with stronger bonus
+    if ((responseStr.includes("¡Hola") || responseStr.includes("Hello") || 
+         responseStr.includes("Hi there") || responseStr.includes("Greetings") ||
+         responseStr.includes("Bienvenido") || responseStr.includes("Welcome")) && 
+        responseStr.length < 100) {
+      // Greeting responses should get a bonus for simple greeting inputs
+      completenessScore += 0.2; // Increased from 0.15 to give more weight to greetings
+    }
+    
+    // Give strong bonus to responses that seem informative and factual (likely from research agent)
+    if ((responseStr.includes("according to") || 
+         responseStr.includes("based on research") || 
+         responseStr.includes("specializes in") || 
+         responseStr.includes("founded in") ||
+         responseStr.includes("was founded") ||
+         responseStr.includes("was established") ||
+         responseStr.includes("was created") ||
+         responseStr.match(/in \d{4}/) // Year pattern
+        ) && 
+        responseStr.length > 100) {
+      // Factual, researched responses should get a stronger bonus
+      completenessScore += 0.25;
+    }
+    
+    // Check if response actually contains clear facts (useful for research agent)
+    if ((responseStr.match(/\b\d{4}\b/) || // Contains a year
+         responseStr.match(/\$[\d,]+/) || // Contains a dollar amount
+         responseStr.includes("located in") || 
+         responseStr.includes("headquarters") ||
+         responseStr.includes("CEO") ||
+         responseStr.includes("founder")) &&
+        responseStr.length > 120) {
+      completenessScore += 0.2; // Bonus for concrete facts
+    }
+    
+    // Detect follow-up answers in context (like answering "by who?" after talking about a company)
+    if (input && input.length < 25 && contextHistory.length > 0) {
+      const lastContext = contextHistory[contextHistory.length - 1] || '';
+      const previousContext = contextHistory.length > 1 ? contextHistory[contextHistory.length - 2] || '' : '';
+      
+      // Check if this is likely a follow-up question
+      if ((input.includes("who") || input.includes("what") || input.includes("when") || input.includes("where") || 
+           input.includes("how") || input.includes("why") || input.includes("which") ||
+           input.includes("look it up") || input.includes("tell me more") || input.includes("more info")) &&
+           (previousContext.includes("founded") || previousContext.includes("created") || 
+            previousContext.includes("established") || previousContext.includes("started"))) {
+        
+        // Specific follow-up about entities mentioned before
+        if ((lastContext.match(/\b[A-Z][a-z]+ [A-Z][a-z]+\b/) || // Proper names
+            lastContext.includes("GBH") || lastContext.includes("company") || lastContext.includes("business")) &&
+            responseStr.match(/\b[A-Z][a-z]+ [A-Z][a-z]+\b/)) { // Response has proper names
+          completenessScore += 0.3; // Strong bonus for appropriate follow-up answers
+        }
+      }
     }
     
     // Normalize to 0-1 range
@@ -122,6 +189,16 @@ export class AgentOrchestrator {
       console.log(`Starting confidence-based routing for input: "${input.substring(0, 30)}${input.length > 30 ? '...' : ''}"`);
       console.log(`Considering ${agentNames.length} agents: ${agentNames.join(', ')}`);
       
+      // Extract conversation history for context-aware decision making
+      const chatHistory: string[] = [];
+      if (context && context.chatHistory && Array.isArray(context.chatHistory)) {
+        context.chatHistory.forEach((msg: any) => {
+          if (msg && msg.kwargs && msg.kwargs._doc && msg.kwargs._doc.content) {
+            chatHistory.push(msg.kwargs._doc.content);
+          }
+        });
+      }
+      
       // LLM-based confidence check - Try the general agent first and use it if confident enough
       // This avoids running all agents for simple/common inputs
       if (agentNames.includes('general')) {
@@ -144,11 +221,14 @@ export class AgentOrchestrator {
           const effectiveThreshold = isLikelySimpleConversation ? 0.7 : generalConfidenceThreshold;
           
           // Check if the response looks complete based on its characteristics
-          const responseSeemsSufficient =
-            generalResult.output.length >= 10 && // Not too short
-            generalResult.output.length < 300 && // Not too verbose
-            !generalResult.output.includes("I need to search") && // Not indicating more info needed
-            !generalResult.output.includes("I don't have enough information"); // Not indicating incomplete
+          const responseCompletenessScore = this.evaluateResponseCompleteness(
+            generalResult.output, 
+            generalResult.confidence ?? 0, 
+            input,
+            chatHistory
+          );
+          
+          const responseSeemsSufficient = responseCompletenessScore >= 0.7;
           
           if ((generalResult.confidence ?? 0) >= effectiveThreshold && responseSeemsSufficient) {
             console.log(`General agent has high confidence (${generalResult.confidence}), using directly without consulting other agents`);
@@ -161,6 +241,15 @@ export class AgentOrchestrator {
         }
       }
       
+      // Check if this is a follow-up to a fact-based question
+      const isFactBasedFollowup = this.isFactualFollowUpQuery(input, chatHistory);
+      
+      // If this is likely a fact-based follow-up and we have a research agent, 
+      // prioritize using the research agent
+      if (isFactBasedFollowup && agentNames.includes('research')) {
+        console.log(`Detected fact-based follow-up question: "${input}"`);
+      }
+      
       // Run all agents in parallel and collect their results
       const allResults = await this.runParallel(agentNames, input, context);
       
@@ -169,14 +258,46 @@ export class AgentOrchestrator {
         Object.entries(allResults).map(([name, result]) => 
           `${name}: ${result.confidence ?? 'undefined'}`));
       
-      // Select the agent with the highest confidence
-      let best: { agent: string, result: AgentResult } | undefined = undefined;
+      // Calculate completeness scores for better comparison
+      const completenessScores = Object.entries(allResults).map(([name, result]) => {
+        const completeness = this.evaluateResponseCompleteness(
+          result.output, 
+          result.confidence ?? 0,
+          input,
+          chatHistory
+        );
+        return { name, result, completeness };
+      });
       
-      for (const [agent, result] of Object.entries(allResults)) {
-        if (!best || (result.confidence ?? 0) > (best.result.confidence ?? 0)) {
-          best = { agent, result };
+      // Sort by completeness score
+      completenessScores.sort((a, b) => b.completeness - a.completeness);
+      
+      console.log(`Completeness scores:`, 
+        completenessScores.map(c => `${c.name}: ${c.completeness.toFixed(2)}`));
+      
+      // Special handling for fact-based follow-ups
+      if (isFactBasedFollowup && allResults['research']) {
+        const researchResult = allResults['research'];
+        const researchCompleteness = this.evaluateResponseCompleteness(
+          researchResult.output, 
+          researchResult.confidence ?? 0,
+          input,
+          chatHistory
+        );
+        
+        // If research agent has a reasonable response for a fact-based follow-up, use it
+        if (researchCompleteness >= 0.6) {
+          console.log(`Selected research agent for fact-based follow-up with completeness: ${researchCompleteness.toFixed(2)}`);
+          return {
+            agent: 'research',
+            result: researchResult,
+            all: allResults
+          };
         }
       }
+      
+      // Select the agent with the highest completeness score
+      let best = completenessScores[0];
       
       if (!best) {
         console.error('No agent returned a result');
@@ -192,19 +313,15 @@ export class AgentOrchestrator {
         'time': 0.4,      // Time agent can be useful even with lower confidence
         'current_time': 0.4, // Current time agent can be useful even with lower confidence
         'open_weather_map': 0.4, // Weather agent can be useful even with lower confidence
-        'research': 0.65, // Research should be reasonably confident
+        'research': 0.6, // Lower threshold for research to make it more likely to be selected
         'document_search': 0.6, // Document search should be reasonably confident
-        'summarizer': 0.0, // Summarizer should have very high confidence to be selected
+        'summarizer': 0.85, // Summarizer should have very high confidence to be selected
         'code_interpreter': 0.75, // Code interpreter should have high confidence
         'code_optimization': 0.75, // Code optimization should have high confidence
-        // Default threshold is used for any agent not listed
       };
       
       // Get the appropriate threshold for the selected agent
-      const adjustedThreshold = agentThresholds[best.agent] ?? threshold;
-      
-      // Use more reliable indicators for conversational inputs instead of pattern matching
-      // These are structural and linguistic characteristics that can help identify conversational inputs
+      const adjustedThreshold = agentThresholds[best.name] ?? threshold;
       
       // Check if this is a short input based on character/word count
       const isShortInput = input.trim().length < 15 || input.trim().split(/\s+/).length < 5;
@@ -216,122 +333,37 @@ export class AgentOrchestrator {
         !input.includes('?') || // Non-questions are often conversational
         input.split(/[.!?]/).length <= 2; // Few sentences suggests conversational
       
-      // Use this as our conversational input detector - simpler and more reliable
-      const isConversationalInput = isLikelyConversational;
-      
-      // Check if general agent already has a valid and complete response for conversational inputs
-      // This prevents us from running specialized agents for simple greetings
-      if (isConversationalInput && allResults['general']) {
-        const generalResult = allResults['general'];
-        const generalConfidence = generalResult.confidence ?? 0;
-        
-        // For greetings and introductions, if general agent has a good response, use it directly
-        // A good response is one that's both reasonably confident and looks like a proper greeting
-        const generalHasCompleteResponse = 
-          // Check confidence is reasonably high
-          generalConfidence >= 0.7 && 
-          // Check if response length looks like a reasonable greeting (not too short, not too long)
-          generalResult.output.length >= 10 && 
-          generalResult.output.length < 200;
-          
-        // If general has a complete response for what's likely a greeting or intro, use it directly
-        if (generalHasCompleteResponse) {
-          console.log(`General agent has a complete response (${generalConfidence}) for conversational input, using directly`);
-          best = { agent: 'general', result: generalResult };
-          // Skip further threshold checks since we've determined this is a simple conversational input
-          return { ...best, all: allResults };
-        }
-        
-        // For conversational inputs, still raise the threshold for specialized agents
-        if (best.agent !== 'general') {
-          const conversationalThreshold = 0.9;
-          console.log(`Conversational input detected - using higher threshold (${conversationalThreshold}) for specialized agent ${best.agent}`);
-          
-          // If specialized agent's confidence isn't extremely high, prefer the general agent
-          if ((best.result.confidence ?? 0) < conversationalThreshold) {
-            if (generalConfidence >= 0.7) {
-              console.log(`Preferring general agent (${generalConfidence}) over ${best.agent} (${best.result.confidence}) for conversational input`);
-              best = { agent: 'general', result: generalResult };
-              // Skip further threshold checks since we've manually selected the general agent
-              return { ...best, all: allResults };
-            }
-          }
+      // Special handling for the summarizer agent
+      if (best.name === 'summarizer') {
+        // Check if another agent has a good enough completeness score
+        const nextBest = completenessScores.find(c => c.name !== 'summarizer');
+        if (nextBest && (best.completeness - nextBest.completeness) < 0.2) {
+          console.log(`Choosing ${nextBest.name} over summarizer as the completeness difference is small: ${(best.completeness - nextBest.completeness).toFixed(2)}`);
+          best = nextBest;
         }
       }
       
-      // Short inputs should require higher confidence from specialized agents
-      // This prevents specialized agents from taking over basic conversations
-      if ((isShortInput || isConversationalInput) && best.agent !== 'general') {
-        // For short/conversational inputs, require higher confidence from specialized agents
-        const shortInputThreshold = isConversationalInput ? 0.9 : 0.8;
+      // Special handling for research agent
+      if (completenessScores.some(c => c.name === 'research')) {
+        const researchScore = completenessScores.find(c => c.name === 'research')!;
         
-        console.log(`${isShortInput ? 'Short' : 'Conversational'} input detected - using higher threshold (${shortInputThreshold}) for specialized agent ${best.agent}`);
-        
-        if ((best.result.confidence ?? 0) < shortInputThreshold && allResults['general']) {
-          const generalConfidence = allResults['general'].confidence ?? 0;
-          // Only use general agent if it has at least some reasonable confidence (0.65+)
-          if (generalConfidence >= 0.65) {
-            console.log(`${best.agent} confidence (${best.result.confidence}) below ${isShortInput ? 'short' : 'conversational'} input threshold, using general agent with confidence ${generalConfidence}`);
-            best = { agent: 'general', result: allResults['general'] };
-          } else {
-            console.log(`Keeping ${best.agent} despite below threshold as general agent has low confidence (${generalConfidence})`);
-          }
-        }
-      } 
-      // Normal threshold check for standard inputs - check if the answer is complete
-      else if ((best.result.confidence ?? 0) < adjustedThreshold) {
-        console.log(`Agent ${best.agent} confidence ${best.result.confidence ?? 0} below threshold ${adjustedThreshold} - checking response completeness`);
-        
-        // If the most confident agent is still below threshold and general agent is available, check response quality
-        if (best.agent !== 'general' && allResults['general']) {
-          const generalConfidence = allResults['general'].confidence ?? 0;
-          const bestConfidence = best.result.confidence ?? 0;
-          
-          // Use our response completeness evaluator to make a better decision
-          const bestCompletenessScore = AgentOrchestrator.evaluateResponseCompleteness(best.result.output, bestConfidence);
-          const generalCompletenessScore = AgentOrchestrator.evaluateResponseCompleteness(allResults['general'].output, generalConfidence);
-          
-          console.log(`Response completeness scores - ${best.agent}: ${bestCompletenessScore.toFixed(2)}, general: ${generalCompletenessScore.toFixed(2)}`);
-          
-          // For inputs where the general agent has a reasonable completeness score, prefer it
-          // when specialized agents are below threshold
-          if (generalCompletenessScore >= 0.7 && 
-              (bestCompletenessScore < 0.75 || generalCompletenessScore >= bestCompletenessScore * 0.95)) {
-            console.log(`${best.agent} below threshold, using general agent with completeness score ${generalCompletenessScore.toFixed(2)}`);
-            best = { agent: 'general', result: allResults['general'] };
-          } else {
-            // The general agent has a less complete response, stick with original choice but warn
-            console.log(`Keeping ${best.agent} despite below threshold as general agent has lower completeness score (${generalCompletenessScore.toFixed(2)} vs ${bestCompletenessScore.toFixed(2)})`);
-          }
-        } else if (best.agent === 'general' && (best.result.confidence ?? 0) < 0.4) {
-          // If even the general agent has very low confidence, add a clarification request
-          best.result.output = `I'm not confident I fully understand your request. Could you provide more details or rephrase your question?`;
-        }
-      } else {
-        console.log(`Agent ${best.agent} confidence ${best.result.confidence ?? 0} meets threshold ${adjustedThreshold}`);
-        
-        // We'll use the evaluateResponseCompleteness method we defined above
-        
-        // Even for responses above threshold, check if this is likely conversational and general has good confidence
-        // This ensures chit-chat goes to general agent even when specialized agents are confident
-        if (best.agent !== 'general' && isConversationalInput && allResults['general']) {
-          const generalConfidence = allResults['general'].confidence ?? 0;
-          const bestConfidence = best.result.confidence ?? 0;
-          
-          // Calculate completeness scores
-          const bestCompletenessScore = AgentOrchestrator.evaluateResponseCompleteness(best.result.output, bestConfidence);
-          const generalCompletenessScore = AgentOrchestrator.evaluateResponseCompleteness(allResults['general'].output, generalConfidence);
-          
-          // For conversational inputs, general agent should win unless specialized agent is clearly better
-          if (generalCompletenessScore >= 0.75 && 
-              (bestCompletenessScore < 0.85 || generalCompletenessScore >= bestCompletenessScore * 0.9)) {
-            console.log(`Preferring general agent (${generalConfidence}, completeness=${generalCompletenessScore.toFixed(2)}) over ${best.agent} (${bestConfidence}, completeness=${bestCompletenessScore.toFixed(2)}) for conversational input`);
-            best = { agent: 'general', result: allResults['general'] };
-          }
+        // If research agent is reasonably good, prefer it for factual queries
+        if (researchScore.completeness >= 0.65 && isFactBasedFollowup) {
+          console.log(`Selected research agent for factual query with completeness: ${researchScore.completeness.toFixed(2)}`);
+          return {
+            agent: 'research',
+            result: researchScore.result,
+            all: allResults
+          };
         }
       }
       
-      return { ...best, all: allResults };
+      // Use the best agent by completeness
+      return { 
+        agent: best.name, 
+        result: best.result, 
+        all: allResults 
+      };
     } catch (error) {
       console.error('Error in routeByConfidence:', error);
       // Return a default response in case of error
@@ -345,5 +377,57 @@ export class AgentOrchestrator {
         all: { fallback: fallbackResult } 
       };
     }
+  }
+  
+  // Helper method to detect if a query is a fact-based follow-up
+  private static isFactualFollowUpQuery(input: string, contextHistory: string[] = []): boolean {
+    if (input.length > 35) return false; // Follow-up questions tend to be short
+    
+    const followUpPatterns = [
+      /^(and|but|so|then|what about|how about|by whom|by who|who by)/i,
+      /^(where|when|why|how|which|what|who)/i,
+      /look it up/i, 
+      /tell me more/i, 
+      /more (info|information|details)/i,
+      /^founded by/i,
+      /^created by/i,
+      /^established by/i,
+    ];
+    
+    // Check for follow-up patterns
+    if (followUpPatterns.some(pattern => input.match(pattern)) && contextHistory.length >= 2) {
+      // Check if previous context contains factual information
+      const previousMessages = contextHistory.slice(-3);
+      for (const msg of previousMessages) {
+        if (msg && (
+          msg.includes("founded") ||
+          msg.includes("established") ||
+          msg.includes("created") ||
+          msg.includes("company") ||
+          msg.includes("organization") ||
+          msg.includes("business") ||
+          msg.match(/in \d{4}/) // Contains a year
+        )) {
+          return true;
+        }
+      }
+    }
+    
+    // Very short inputs that could be follow-ups to factual queries
+    if (input.length < 15 && input.match(/^(who|what|when|where|why|how|which)/) && contextHistory.length > 0) {
+      return true;
+    }
+    
+    // Special case for "look it up" type queries
+    if ((input.includes("look it up") || 
+         input.includes("search for it") || 
+         input.includes("find out") ||
+         input.includes("tell me") ||
+         input.includes("check it")) && 
+        contextHistory.length > 0) {
+      return true;
+    }
+    
+    return false;
   }
 }
