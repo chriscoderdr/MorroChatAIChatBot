@@ -295,40 +295,40 @@ Available agents:
 ${availableAgents.map(agent => `- ${agent}: ${this.getAgentDescription(agent)}`).join('\n')}
 
 CRITICAL ROUTING RULES:
-1. For simple greetings (like "Hola", "Hello", "Hi", "Buenos días", etc.) or general conversation starters:
+
+1. For WEATHER queries (HIGHEST PRIORITY):
+   - Route to 'open_weather_map' or 'weather' agent for ANY weather-related question
+   - Keywords: clima, weather, temperature, temperatura, rain, lluvia, forecast, pronóstico, conditions, condiciones
+   - Examples: "como esta el clima", "what's the weather", "temperatura en", "weather in"
+   - Confidence should be HIGH (0.9) for weather queries
+
+2. For simple greetings (like "Hola", "Hello", "Hi", "Buenos días", etc.):
    - ALWAYS route to 'general' agent
    - NEVER route to specialized agents like 'weather', 'time', or 'research' for basic greetings
    - Confidence should be HIGH (0.8-0.9) for clear greetings
 
-2. For document-related queries (HIGHEST PRIORITY):
+3. For document-related queries:
    - Route to 'document_search' agent if available for ANY document-related question
-   - Examples include: "what is this document about?", "what details does it have?", "according to the document", "summarize the document", "what does the PDF contain?", "tell me about my document"
-   - Also consider context: if previous messages mention document uploads or document content, follow-up questions like "what details does it have?" likely refer to the document
-   - Questions with pronouns like "it" or "this" in document contexts should route to document_search
+   - Examples: "what is this document about?", "according to the document", "summarize the document"
+   - Also consider context: if previous messages mention document uploads
    - Confidence should be HIGH (0.8-0.95) for document queries
-
-3. For weather queries (explicitly asking about weather, climate, temperature, etc.):
-   - Route to 'weather' or 'open_weather_map' agent only if the query clearly mentions weather terms
-   - Examples: "What's the weather like?", "How's the temperature?", "clima en Madrid"
 
 4. For time queries (explicitly asking for current time, date, timezone):
    - Route to 'time' or 'current_time' agent only if the query clearly mentions time-related terms
    - Examples: "What time is it?", "Current time in New York", "qué hora es"
+   - Do NOT route time queries for weather-related "tiempo" in Spanish
 
 5. For company/business/factual information queries:
    - Route to 'research' agent if available
    - Examples: "Who founded Apple?", "What does Microsoft do?"
 
 6. Context Awareness:
-   - Analyze the conversation history for document mentions, uploads, or previous document discussions
-   - If the conversation context suggests the user is asking about a previously mentioned document, route to 'document_search'
+   - Analyze conversation history for document mentions, uploads, or previous document discussions
    - Consider pronouns and implicit references in context
-
-IMPORTANT: If the input is just a word that could be interpreted multiple ways (like "Hola" which is both a greeting and a place name), prioritize the most common interpretation (greeting) and route to 'general'.
 
 Based on the query and conversation context, respond with a JSON object containing:
 1. "agentName": The name of the most appropriate agent from the available list
-2. "confidence": A number between 0-1 representing your confidence in this selection
+2. "confidence": A number between 0-1 representing your confidence in this selection (use 0.9 for weather queries)
 3. "reasoning": A brief explanation of why you selected this agent
 
 Only respond with the JSON object, nothing else.`;
@@ -372,8 +372,22 @@ Only respond with the JSON object, nothing else.`;
         }
       }
       
-      // Fallback: Extract agent name from text response
-      const agentNameMatch = responseStr.match(/`([^`]+)` agent|(\w+) agent/i);
+      // Enhanced agent name extraction from text response
+      // Look for specific weather agent mentions first
+      const weatherAgentMatch = responseStr.match(/`(open_weather_map|weather)`|(?:open_weather_map|weather)\b/i);
+      if (weatherAgentMatch) {
+        const predictedAgent = weatherAgentMatch[1] || weatherAgentMatch[0].toLowerCase();
+        if (availableAgents.includes(predictedAgent)) {
+          console.log(`LLM predicted weather agent from text: ${predictedAgent} with confidence 0.9`);
+          return {
+            agentName: predictedAgent,
+            confidence: 0.9 // High confidence for explicit weather agent mentions
+          };
+        }
+      }
+      
+      // General agent name extraction
+      const agentNameMatch = responseStr.match(/`([^`]+)`|(\w+) agent/i);
       if (agentNameMatch) {
         const predictedAgent = agentNameMatch[1] || agentNameMatch[2];
         if (availableAgents.includes(predictedAgent)) {
@@ -428,8 +442,8 @@ Only respond with the JSON object, nothing else.`;
       'research': 'Focuses on providing detailed factual information by searching the web and analyzing results. Handles company information, news, recent events, people, historical events, and other knowledge-based topics. This is the preferred agent for all factual queries.',
       'time': 'Provides current time, date, and timezone information.',
       'current_time': 'Provides current time, date, and timezone information.',
-      'weather': 'Provides weather forecasts and current conditions for specific locations.',
-      'open_weather_map': 'Provides detailed weather information using OpenWeatherMap data.',
+      'weather': 'CRITICAL: Provides weather forecasts and current conditions for specific locations. Use this agent for ANY weather-related query including "clima", "weather", "temperature", "temperatura", "forecast", "pronóstico", etc.',
+      'open_weather_map': 'CRITICAL: Provides detailed weather information using OpenWeatherMap data. PREFERRED weather agent. Use this agent for ANY weather-related query including "clima", "weather", "temperature", "temperatura", "forecast", "pronóstico", etc.',
       'document_search': 'CRITICAL: Searches through user-uploaded documents to find specific information. Use this agent for ANY query that asks about documents, uploaded files, or content within documents. This includes questions like "what is this document about?", "what details does it have?", "according to the document", etc. This agent has access to the user\'s uploaded documents.',
       'summarizer': 'Summarizes long pieces of text or content.',
       'code_interpreter': 'Analyzes, explains, and executes code snippets.',
@@ -531,6 +545,30 @@ Only respond with the JSON object, nothing else.`;
       // Get initial query classification for logging
       const queryTypes = this.classifyQueryType(input);
       console.log(`Query classified as: ${queryTypes.join(', ')}`);
+      
+      // PRIORITY WEATHER DETECTION: Direct routing for weather queries
+      if (queryTypes.includes('weather')) {
+        console.log(`Direct weather query detected: "${input}"`);
+        
+        // Try open_weather_map first, then weather agent
+        const preferredWeatherAgent = agentNames.includes('open_weather_map') ? 'open_weather_map' : 
+                                     agentNames.includes('weather') ? 'weather' : null;
+        
+        if (preferredWeatherAgent) {
+          console.log(`Using weather agent directly: ${preferredWeatherAgent}`);
+          try {
+            const weatherResult = await this.runSingleAgent(preferredWeatherAgent, input, context);
+            return {
+              agent: preferredWeatherAgent,
+              result: weatherResult,
+              all: { [preferredWeatherAgent]: weatherResult }
+            };
+          } catch (error) {
+            console.error(`Error running weather agent ${preferredWeatherAgent}:`, error);
+            // Fall through to LLM prediction if weather agent fails
+          }
+        }
+      }
       
       // Get LLM prediction for best agent
       const prediction = await this.predictBestAgent(input, agentNames, context);
@@ -646,6 +684,27 @@ Only respond with the JSON object, nothing else.`;
     const queryTypes: string[] = [];
     const lowercaseInput = input.toLowerCase();
     
+    // Check for weather queries (HIGH PRIORITY)
+    if (lowercaseInput.includes('clima') ||
+        lowercaseInput.includes('weather') ||
+        lowercaseInput.includes('temperature') ||
+        lowercaseInput.includes('temperatura') ||
+        lowercaseInput.includes('rain') ||
+        lowercaseInput.includes('lluvia') ||
+        lowercaseInput.includes('sun') ||
+        lowercaseInput.includes('sol') ||
+        lowercaseInput.includes('wind') ||
+        lowercaseInput.includes('viento') ||
+        lowercaseInput.includes('forecast') ||
+        lowercaseInput.includes('pronóstico') ||
+        lowercaseInput.includes('pronostico') ||
+        lowercaseInput.includes('conditions') ||
+        lowercaseInput.includes('condiciones') ||
+        lowercaseInput.match(/how.*hot|how.*cold|qué.*calor|qué.*frío/i) ||
+        lowercaseInput.match(/como.*esta.*clima|how.*weather/i)) {
+      queryTypes.push('weather');
+    }
+    
     // Check for news/current events queries
     if (lowercaseInput.includes('news') || 
         lowercaseInput.includes('noticias') || 
@@ -664,10 +723,9 @@ Only respond with the JSON object, nothing else.`;
       queryTypes.push('news');
     }
     
-    // Check for time-specific queries
-    if (lowercaseInput.includes('time') ||
+    // Check for time-specific queries (but not weather-related "tiempo")
+    if ((lowercaseInput.includes('time') ||
         lowercaseInput.includes('hora') ||
-        lowercaseInput.includes('tiempo') ||
         lowercaseInput.includes('clock') ||
         lowercaseInput.includes('current time') ||
         lowercaseInput.includes('what time') ||
@@ -675,7 +733,8 @@ Only respond with the JSON object, nothing else.`;
         lowercaseInput.includes('today\'s date') ||
         lowercaseInput.includes('day of the week') ||
         lowercaseInput.includes('timezone') ||
-        lowercaseInput.includes('qué hora')) {
+        lowercaseInput.includes('qué hora')) &&
+        !queryTypes.includes('weather')) { // Don't classify as time if already weather
       queryTypes.push('time');
     }
     

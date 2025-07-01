@@ -246,8 +246,49 @@ export class LangChainService {
           return "Please provide a valid location to check the weather.";
         }
         
-        // Clean up the location string
-        const cleanLocation = location.trim().replace(/^(in|en|at|for|para)\s+/i, '');
+        // Use LLM to extract location from natural language weather queries
+        const extractLocationWithLLM = async (input: string): Promise<string> => {
+          console.log(`Using LLM to extract location from: "${input}"`);
+          
+          const extractionPrompt = `You are a location extraction assistant. Your task is to extract the city/location name from weather-related queries and format it properly for OpenWeatherMap API.
+
+RULES:
+1. Extract ONLY the city/location name from the query
+2. Format as "City, Country" when possible (e.g., "Santo Domingo, DO", "New York, US")
+3. Use standard country codes (US, DO, ES, FR, etc.)
+4. If no country is specified, return just the city name
+5. Remove ALL question words, weather terms, and extra text
+6. Return ONLY the location, nothing else
+
+Examples:
+- "como esta el clima en santo domingo, dominican republic?" → "Santo Domingo, DO"
+- "what's the weather in New York?" → "New York, US"
+- "weather in Paris France" → "Paris, FR"
+- "clima en Madrid" → "Madrid, ES"
+- "temperature in Tokyo" → "Tokyo, JP"
+
+Query: "${input}"
+
+Location:`;
+
+          try {
+            const extractionResult = await llm.invoke(extractionPrompt);
+            const extractedLocation = typeof extractionResult.content === 'string' 
+              ? extractionResult.content.trim() 
+              : extractionResult.content.toString().trim();
+            
+            console.log(`LLM extracted location: "${extractedLocation}" from query: "${input}"`);
+            return extractedLocation;
+          } catch (error) {
+            console.error(`Error using LLM for location extraction: ${error.message}`);
+            // Fallback to basic cleaning if LLM fails
+            const fallback = input.replace(/^(como\s+esta\s+el\s+clima\s+en\s+|what(?:'s|\s+is)\s+the\s+weather\s+(?:like\s+)?(?:in\s+|at\s+|for\s+)|weather\s+(?:in\s+|at\s+|for\s+)|clima\s+en\s+|tiempo\s+en\s+)/i, '').replace(/\?/g, '').trim();
+            console.log(`LLM extraction failed, using fallback: "${fallback}"`);
+            return fallback;
+          }
+        };
+        
+        const cleanLocation = await extractLocationWithLLM(location);
         
         // Get API key from config
         const apiKey = this.configService.get<string>('OPENWEATHER_API_KEY');
