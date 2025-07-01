@@ -169,7 +169,7 @@ export class LangChainService {
     }
 
     // Allow dynamic agent/skill registration via AgentRegistry
-    const dynamicTools = AgentRegistry.getAllAgents().map(agent =>
+    const allDynamicTools = AgentRegistry.getAllAgents().map(agent =>
       new DynamicStructuredTool({
         name: agent.name,
         description: agent.description,
@@ -181,29 +181,38 @@ export class LangChainService {
       })
     );
 
-    const llmWithTools = llm.bindTools ? llm.bindTools(dynamicTools) : llm;
+    // Create specialized tool sets for different agent types
+    const timeTools = allDynamicTools.filter(tool => tool.name === 'current_time' || tool.name === 'web_search');
+    const weatherTools = allDynamicTools.filter(tool => tool.name === 'open_weather_map' || tool.name === 'web_search');
+    const researchTools = allDynamicTools.filter(tool => tool.name === 'web_search' || tool.name === 'calculator');
+    const documentTools = allDynamicTools.filter(tool => tool.name === 'pdf_retrieval' || tool.name === 'web_search');
+    const generalTools = allDynamicTools; // General agent gets all tools
 
-    const createAgentExecutor = (systemMessage: string, agentType: 'general' | 'specialized' = 'specialized'): AgentExecutor => {
+    const createAgentExecutor = (systemMessage: string, agentType: 'general' | 'specialized' = 'specialized', tools?: any[]): AgentExecutor => {
       let finalSystemMessage = systemMessage;
       if (topic) {
         finalSystemMessage = `Your most important rule is that you are an assistant dedicated ONLY to the topic of "${topic}". You must politely refuse any request that is not directly related to this topic.\n\n` + systemMessage;
       }
+      
+      const agentTools = tools || generalTools;
+      const llmWithTools = llm.bindTools ? llm.bindTools(agentTools) : llm;
+      
       const prompt = ChatPromptTemplate.fromMessages([
         ["system", finalSystemMessage],
         new MessagesPlaceholder("chat_history"),
         ["human", "{input}"],
         new MessagesPlaceholder("agent_scratchpad"),
       ]);
-      const agent = createToolCallingAgent({ llm: llmWithTools, tools: dynamicTools, prompt });
-      return new AgentExecutor({ agent, tools: dynamicTools, verbose: true });
+      const agent = createToolCallingAgent({ llm: llmWithTools, tools: agentTools, prompt });
+      return new AgentExecutor({ agent, tools: agentTools, verbose: true });
     };
 
-    const timeAgent = createAgentExecutor(TIME_AGENT_PROMPT); // Defaults to 'specialized'
-    const weatherAgent = createAgentExecutor(WEATHER_AGENT_PROMPT); // Defaults to 'specialized'
+    const timeAgent = createAgentExecutor(TIME_AGENT_PROMPT, 'specialized', timeTools);
+    const weatherAgent = createAgentExecutor(WEATHER_AGENT_PROMPT, 'specialized', weatherTools);
     // Always use the detailed RESEARCH_AGENT_PROMPT for the research agent, even with chat history
-    const researchAgent = createAgentExecutor(RESEARCH_AGENT_PROMPT); // Dedicated research agent
-    const generalAgent = createAgentExecutor(GENERAL_AGENT_PROMPT, 'general');
-    const documentAgent = createAgentExecutor(DOCUMENT_AGENT_PROMPT); // Defaults to 'specialized'
+    const researchAgent = createAgentExecutor(RESEARCH_AGENT_PROMPT, 'specialized', researchTools);
+    const generalAgent = createAgentExecutor(GENERAL_AGENT_PROMPT, 'general', generalTools);
+    const documentAgent = createAgentExecutor(DOCUMENT_AGENT_PROMPT, 'specialized', documentTools);
 
     // This is our main runnable. It's a single Lambda that contains all the logic.
     const finalRunnable = new RunnableLambda({
@@ -211,8 +220,14 @@ export class LangChainService {
         const lowerCaseInput = input.input.toLowerCase();
         const lastAIMessage = input.chat_history.filter(m => m._getType() === 'ai').slice(-1)[0]?.content.toString().toLowerCase() ?? "";
 
-        const timeKeywords = ['hora', 'time', 'fecha', 'date', 'día', 'dia'];
-        const weatherKeywords = ['clima', 'temperatura', 'weather', 'pronóstico', 'forecast', 'tiempo'];
+        const timeKeywords = [
+          'hora', 'time', 'fecha', 'date', 'día', 'dia',
+          'what time', 'current time', 'time in', 'time is',
+          'timezone', 'clock', 'now in', 'hora en',
+          'qué hora', 'que hora', 'tiempo en', 'what\'s the time',
+          'tell me the time', 'current local time', 'local time'
+        ];
+        const weatherKeywords = ['clima', 'temperatura', 'weather', 'pronóstico', 'forecast', 'llover', 'lluvia', 'rain', 'snow', 'nieve', 'cloudy', 'nublado', 'sunny', 'soleado', 'cold', 'frío', 'hot', 'calor', 'wind', 'viento'];
         const documentKeywords = ['documento', 'pdf', 'file', 'archivo', 'subido', 'upload'];
         const codeKeywords = ['code', 'código', 'programming', 'programación', 'function', 'función', 'script', 'debug', 'error', 'optimize', 'optimizar', 'refactor', 'syntax', 'algorithm', 'algoritmo', 'class', 'method', 'variable', 'loop', 'if', 'else', 'import', 'export', 'const', 'let', 'var', 'async', 'await'];
         const optimizationKeywords = ['optimize', 'optimizar', 'performance', 'rendimiento', 'faster', 'más rápido', 'improve', 'mejorar', 'efficient', 'eficiente', 'slow', 'lento', 'speed up', 'acelerar'];

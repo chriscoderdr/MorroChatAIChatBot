@@ -1,0 +1,102 @@
+/* Markdown content specific styles */
+.markdown-content {
+  line-height: 1.6;
+}
+
+.markdown-content > *:first-child {
+  margin-top: 0 !important;
+}
+
+.markdown-content > *:last-child {
+  margin-bottom: 0 !important;
+}
+
+/* Custom scrollbar for code blocks */
+.markdown-content pre::-webkit-scrollbar {
+  height: 8px;
+}
+
+.markdown-content pre::-webkit-scrollbar-track {
+  background: #374151;
+  border-radius: 4px;
+}
+
+.markdown-content pre::-webkit-scrollbar-thumb {
+  background: #6b7280;
+  border-radius: 4px;
+}
+
+.markdown-content pre::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Better spacing for nested lists */
+.markdown-content ul ul,
+.markdown-content ol ol,
+.markdown-content ul ol,
+.markdown-content ol ul {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Code highlighting animations */
+.code-block-header {
+  transition: all 0.2s ease-in-out;
+}
+
+.code-block-container:hover .code-block-header {
+  background-color: rgba(31, 41, 55, 0.95);
+  border-color: rgba(107, 114, 128, 0.5);
+}
+
+/* Enhanced focus states for accessibility */
+.code-block-container:focus-within .code-block-header {
+  box-shadow: 0 0 0 2px #3b82f6;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+/* Smooth transitions for copy button tooltips */
+.code-block-container .absolute {
+  transition: opacity 0.2s ease-in-out;
+}
+
+/* Better text selection in code blocks */
+.markdown-content code {
+  -webkit-user-select: all;
+  -moz-user-select: all;
+  -ms-user-select: all;
+  user-select: all;
+}
+
+/* Performance indicators styling */
+.performance-tip {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(59, 130, 246, 0.1) 100%);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1rem 0;
+}
+
+.optimization-warning {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.1) 0%, rgba(245, 101, 101, 0.1) 100%);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1rem 0;
+}
+
+/* Enhanced mobile responsiveness */
+@media (max-width: 640px) {
+  .markdown-content {
+    font-size: 0.875rem;
+  }
+  
+  .code-block-header {
+    padding: 0.75rem;
+  }
+  
+  .code-block-header .flex {
+    gap: 0.5rem;
+  }
+}

@@ -8,10 +8,10 @@ interface EmptyStateProps {
 
 export const EmptyState: React.FC<EmptyStateProps> = ({ onSuggestionClick }) => {
   const suggestionCards = [
-    { title: "Plan a trip", description: "to the beaches of Montecristi" },
-    { title: "Write a poem", description: "about the iconic El Morro" },
+    { title: "Optimize this code", description: "for better performance and readability" },
+    { title: "Analyze complexity", description: "of my algorithm implementation" },
     { title: "Explain in simple terms", description: "what makes React so powerful" },
-    { title: "Suggest a color palette", description: "inspired by a Caribbean sunset" },
+    { title: "Review my code", description: "and suggest improvements" },
   ];
 
   const handleCardClick = (card: { title: string; description: string }) => {

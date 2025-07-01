@@ -10,6 +10,7 @@ import { ChatHistoryError } from './components/chat/chat-history-error';
 import { useChatMutation } from './hooks/useChatMutation';
 import { useUploadPdfMutation } from './hooks/useUploadPdfMutation';
 import { useChatHistory } from './hooks/useChatHistory';
+import { isCodingRelated } from './utils/coding-detection';
 
 
 interface IMessage {
@@ -17,6 +18,7 @@ interface IMessage {
   isUser: boolean;
   isError?: boolean;
   messageId?: string; // To track messages for retries
+  isCodingRelated?: boolean; // To track if the message is coding-related
 }
 
 function App() {
@@ -26,12 +28,14 @@ function App() {
   const handleNewChat = () => {
     setMessages([]); // Clear chat history
     setLastFailedMessage(null);
+    setLastMessageWasCodingRelated(false);
     setFileUpload(null);
     newChatMutation.mutate();
     // Optionally, reset other state if needed
   };
   const [messages, setMessages] = useState<IMessage[]>([]);
   const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null);
+  const [lastMessageWasCodingRelated, setLastMessageWasCodingRelated] = useState<boolean>(false);
   const [fileUpload, setFileUpload] = useState<{
     fileName: string;
     status: 'uploading' | 'failed' | 'retrying' | 'success' | null;
@@ -49,13 +53,17 @@ function App() {
   const uploadPdfWithMessage = (file: File, message: string) => {
     setFileUpload({ fileName: file.name, status: 'uploading', progress: 0, file, message });
     // If there are no messages and no message text, add a placeholder so the welcome screen disappears
+    const isMessageCodingRelated = isCodingRelated(message);
+    setLastMessageWasCodingRelated(isMessageCodingRelated);
+    
     setMessages(prev => {
       if (prev.length === 0 && !message) {
         return [
           {
             text: `[PDF Uploaded] ${file.name}`,
             isUser: true,
-            messageId: `file-${Date.now()}`
+            messageId: `file-${Date.now()}`,
+            isCodingRelated: false
           }
         ];
       }
@@ -82,14 +90,16 @@ function App() {
               : [{
                 text: `${message ? message + ' ' : ''}[PDF Uploaded] ${file.name}`,
                 isUser: true,
-                messageId: `file-${Date.now()}`
+                messageId: `file-${Date.now()}`,
+                isCodingRelated: isMessageCodingRelated
               }]),
             ...(
               data.answer
                 ? [{
                   text: data.answer,
                   isUser: false,
-                  messageId: `answer-${Date.now()}`
+                  messageId: `answer-${Date.now()}`,
+                  isCodingRelated: isMessageCodingRelated
                 }]
                 : []
             )
@@ -140,7 +150,8 @@ function App() {
       const historyMessages = chatHistoryQuery.data.messages.map((msg, idx) => ({
         text: msg.data.content,
         isUser: msg.type === 'human',
-        messageId: `history-${idx}`
+        messageId: `history-${idx}`,
+        isCodingRelated: msg.type === 'human' ? isCodingRelated(msg.data.content) : false
       }));
       setMessages(historyMessages);
     }
@@ -169,10 +180,14 @@ function App() {
     }
     // Otherwise, send just the message
     const messageId = Date.now().toString();
+    const isMessageCodingRelated = isCodingRelated(message);
+    setLastMessageWasCodingRelated(isMessageCodingRelated);
+    
     setMessages(prevMessages => [...prevMessages, {
       text: message,
       isUser: true,
-      messageId
+      messageId,
+      isCodingRelated: isMessageCodingRelated
     }]);
     setLastFailedMessage(message);
     chatMutation.mutate({ message }, {
@@ -181,7 +196,8 @@ function App() {
         setMessages(prevMessages => [...prevMessages, {
           text: data.reply,
           isUser: false,
-          messageId: `response-${messageId}`
+          messageId: `response-${messageId}`,
+          isCodingRelated: isMessageCodingRelated
         }]);
       },
       onError: (error) => {
@@ -189,7 +205,8 @@ function App() {
           text: `Error: ${error.message}`,
           isUser: false,
           isError: true,
-          messageId: `error-${messageId}`
+          messageId: `error-${messageId}`,
+          isCodingRelated: isMessageCodingRelated
         }]);
       }
     });
@@ -217,7 +234,7 @@ function App() {
           </div>
         </div>
         <main ref={chatContainerRef} className="flex-1 p-0 flex flex-col min-h-0">
-          <div className={messages.length === 0 ? 'flex-1 w-full flex flex-col min-h-0' : 'max-w-4xl mx-auto w-full flex flex-col flex-1 min-h-0'}>
+          <div className={messages.length === 0 ? 'flex-1 w-full flex flex-col min-h-0' : 'max-w-5xl mx-auto w-full flex flex-col flex-1 min-h-0'}>
             {/* Show empty state or history loading/error if no messages */}
             {messages.length === 0 ? (
               chatHistoryQuery.isLoading ? (
@@ -247,6 +264,7 @@ function App() {
                       <div key={msg.messageId || index} ref={isLast ? lastMessageRef : undefined}>
                         <ChatMessage
                           message={msg}
+                          isCodingRelated={msg.isCodingRelated}
                           onRetry={msg.isError ? handleRetry : undefined}
                         />
                       </div>
@@ -254,7 +272,10 @@ function App() {
                   })}
                   {(chatMutation.isPending || uploadPdfMutation.isPending) && (
                     <div ref={lastMessageRef}>
-                      <ChatMessage message={{ text: '', isUser: false }} />
+                      <ChatMessage 
+                        message={{ text: '', isUser: false }} 
+                        isCodingRelated={lastMessageWasCodingRelated}
+                      />
                     </div>
                   )}
                 </div>
@@ -264,7 +285,7 @@ function App() {
         </main>
         {/* Always show file upload bubble if uploading or feedback is needed */}
         {fileUpload && fileUpload.status && (
-          <div className="px-6 pb-2 max-w-4xl mx-auto w-full">
+          <div className="px-6 pb-2 max-w-5xl mx-auto w-full">
             <FileUploadBubble
               fileName={fileUpload.fileName}
               status={fileUpload.status}

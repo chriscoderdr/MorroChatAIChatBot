@@ -1,10 +1,14 @@
 import React from 'react';
+import { MarkdownRenderer } from '../ui/markdown-renderer';
+import { CodingTypingIndicator } from '../ui/coding-typing-indicator';
+import { GeneralTypingIndicator } from '../ui/general-typing-indicator';
 
 interface ChatBubbleProps {
   message: string;
   isUser?: boolean;
   isTyping?: boolean;
   isError?: boolean;
+  isCodingRelated?: boolean;
   onRetry?: () => void;
 }
 
@@ -13,6 +17,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   isUser = false, 
   isTyping = false,
   isError = false,
+  isCodingRelated = false,
   onRetry
 }) => {
   const bubbleClasses = isUser
@@ -23,17 +28,31 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
 
   if (isTyping) {
     return (
-        <div className={`w-full max-w-xs sm:max-w-md md:max-w-xl px-2 sm:px-4 py-2 sm:py-3 rounded-2xl ${isUser ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'} flex items-center space-x-1`}>
-            <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.3s]"></span>
-            <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.15s]"></span>
-            <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></span>
+        <div className={`w-full max-w-xs sm:max-w-md md:max-w-4xl px-2 sm:px-4 py-2 sm:py-3 rounded-2xl ${isUser ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'}`}>
+            {isUser ? (
+              <div className="flex items-center space-x-1">
+                <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.3s]"></span>
+                <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.15s]"></span>
+                <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse"></span>
+              </div>
+            ) : isCodingRelated ? (
+              <CodingTypingIndicator />
+            ) : (
+              <GeneralTypingIndicator />
+            )}
         </div>
     )
   }
 
   return (
-    <div className={`w-full max-w-xs sm:max-w-md md:max-w-xl px-2 sm:px-4 py-2 sm:py-3 rounded-2xl ${bubbleClasses}`}>
-      <p className="text-xs sm:text-sm whitespace-pre-wrap">{message}</p>
+    <div className={`w-full max-w-xs sm:max-w-md md:max-w-4xl px-2 sm:px-4 py-2 sm:py-3 rounded-2xl ${bubbleClasses}`}>
+      {isUser ? (
+        <p className="text-xs sm:text-sm whitespace-pre-wrap">{message}</p>
+      ) : (
+        <div className="text-xs sm:text-sm">
+          <MarkdownRenderer content={message} />
+        </div>
+      )}
       
       {isError && onRetry && (
         <div className="mt-2 sm:mt-3 flex items-center">
