@@ -6,7 +6,20 @@ import { LangChainService } from '../../services/langchain.service';
 
 // Mock dependencies for LangChainService
 const mockConfigService = {
-  get: jest.fn().mockReturnValue('test-value'),
+  get: jest.fn().mockImplementation((key: string) => {
+    // Use real environment values for API keys to allow actual API calls in tests
+    if (key === 'OPENWEATHER_API_KEY') {
+      return process.env.OPENWEATHER_API_KEY;
+    }
+    if (key === 'GEMINI_API_KEY') {
+      return process.env.GEMINI_API_KEY;
+    }
+    if (key === 'ai.provider') {
+      return 'gemini';
+    }
+    // Return test values for other keys
+    return 'test-value';
+  }),
 };
 
 // Mock the chat session dependencies
