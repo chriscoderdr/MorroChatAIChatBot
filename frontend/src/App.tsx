@@ -12,7 +12,7 @@ import { useUploadPdfMutation } from './hooks/useUploadPdfMutation';
 import { useChatHistory } from './hooks/useChatHistory';
 import { formatPdfUploadMessage } from './utils/pdf-utils';
 import { isCodingRelated } from './utils/coding-detection';
-
+import { CodeFormattingGuide } from './components/ui/code-formatting-guide';
 
 interface IMessage {
   text: string;
@@ -25,11 +25,29 @@ interface IMessage {
 function App() {
   const uploadPdfMutation = useUploadPdfMutation();
   const newChatMutation = useNewChatMutation();
-  const [isSidebarVisible, setIsSidebarVisible] = useState(true);
+  const [isCodeGuideOpen, setIsCodeGuideOpen] = useState(false);
   
-  // Handler for toggling sidebar visibility
+  // Initialize sidebar visibility state from localStorage, defaulting to true
+  const [isSidebarVisible, setIsSidebarVisible] = useState(() => {
+    try {
+      const stored = localStorage.getItem('morro-sidebar-visible');
+      return stored !== null ? JSON.parse(stored) : true;
+    } catch {
+      return true;
+    }
+  });
+  
+  // Handler for toggling sidebar visibility with persistence
   const handleToggleSidebar = () => {
-    setIsSidebarVisible(prev => !prev);
+    setIsSidebarVisible((prev: boolean) => {
+      const newValue = !prev;
+      try {
+        localStorage.setItem('morro-sidebar-visible', JSON.stringify(newValue));
+      } catch (error) {
+        console.warn('Failed to save sidebar state to localStorage:', error);
+      }
+      return newValue;
+    });
   };
   
   // Handler for starting a new chat session
@@ -319,6 +337,12 @@ function App() {
         <EnhancedChatInput
           onSendMessage={handleSendMessage}
           isLoading={chatMutation.isPending || uploadPdfMutation.isPending}
+          isCodeGuideOpen={isCodeGuideOpen}
+          setIsCodeGuideOpen={setIsCodeGuideOpen}
+        />
+        <CodeFormattingGuide 
+          isOpen={isCodeGuideOpen} 
+          onClose={() => setIsCodeGuideOpen(false)} 
         />
       </div>
     </div>

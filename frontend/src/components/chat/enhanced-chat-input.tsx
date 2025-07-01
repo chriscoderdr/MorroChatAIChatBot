@@ -1,11 +1,11 @@
 import React, { useState, forwardRef, useRef, useEffect } from 'react';
 import { FileUpload } from './file-upload';
 import { Code2, Eye, EyeOff, Lightbulb } from 'lucide-react';
-import { CodeFormattingGuide } from '../ui/code-formatting-guide';
 
 interface EnhancedChatInputProps {
     onSendMessage: (message: string, file?: File | null) => void;
     isLoading: boolean;
+    setIsCodeGuideOpen: (isOpen: boolean) => void;
 }
 
 const COMMON_LANGUAGES = [
@@ -31,7 +31,7 @@ const CODE_SUGGESTIONS = [
     }
 ];
 
-export const EnhancedChatInput = forwardRef<HTMLDivElement, EnhancedChatInputProps>(({ onSendMessage, isLoading }, ref) => {
+export const EnhancedChatInput = forwardRef<HTMLDivElement, EnhancedChatInputProps>(({ onSendMessage, isLoading, setIsCodeGuideOpen }, ref) => {
     const [input, setInput] = useState('');
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [showPreview, setShowPreview] = useState(false);
@@ -112,6 +112,14 @@ export const EnhancedChatInput = forwardRef<HTMLDivElement, EnhancedChatInputPro
                         Code Templates
                     </button>
                     
+                    <button
+                        onClick={() => setIsCodeGuideOpen(true)}
+                        className="flex items-center gap-2 text-xs text-gray-400 hover:text-blue-400 transition-colors"
+                    >
+                        <Code2 className="h-3 w-3" />
+                        Code Formatting Guide
+                    </button>
+
                     {input.trim() && (
                         <button
                             onClick={() => setShowPreview(!showPreview)}
@@ -248,8 +256,6 @@ export const EnhancedChatInput = forwardRef<HTMLDivElement, EnhancedChatInputPro
                 <span>MorroChat can make mistakes. Consider checking important information.</span>
                 <span className="text-gray-600">•</span>
                 <span className="text-blue-400">Shift+Enter for new line</span>
-                <span className="text-gray-600">•</span>
-                <CodeFormattingGuide />
             </div>
         </div>
     );
