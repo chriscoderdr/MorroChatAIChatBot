@@ -1,8 +1,27 @@
 import { AgentRegistry } from '../agent-registry';
+import { LangChainService } from '../services/langchain.service';
+import { ConfigService } from '@nestjs/config';
+
+// Mock dependencies for LangChainService
+const mockConfigService = {
+  get: jest.fn().mockReturnValue('test-value'),
+};
+
+const mockChatSessionModel = {
+  find: jest.fn(),
+  findOne: jest.fn(),
+  create: jest.fn(),
+};
+
+// Initialize LangChainService to register agents
+beforeAll(() => {
+  // This will call the constructor and register the agents
+  new LangChainService(mockConfigService as any, mockChatSessionModel as any);
+});
 
 describe('Weather Agent Tests', () => {
   it('should handle weather queries correctly', async () => {
-    const result = await AgentRegistry.callAgent('weather', 'What\'s the weather like in New York?', {});
+    const result = await AgentRegistry.callAgent('open_weather_map', 'What\'s the weather like in New York?', {});
     expect(result).toBeDefined();
     expect(result.output).toBeDefined();
     expect(typeof result.output).toBe('string');
@@ -11,18 +30,18 @@ describe('Weather Agent Tests', () => {
   });
 
   it('should extract location from query', async () => {
-    const result = await AgentRegistry.callAgent('weather', 'Tell me about the weather in Los Angeles', {});
+    const result = await AgentRegistry.callAgent('open_weather_map', 'Tell me about the weather in Los Angeles', {});
     expect(result.output.toLowerCase()).toMatch(/los angeles/i);
   });
 
   it('should handle follow-up questions with context', async () => {
     // First set the context with New York
-    await AgentRegistry.callAgent('weather', 'What\'s the weather like in New York?', {
+    await AgentRegistry.callAgent('open_weather_map', 'What\'s the weather like in New York?', {
       sessionId: 'weather-test-session'
     });
     
     // Then ask a follow-up that doesn't specify location
-    const result = await AgentRegistry.callAgent('weather', 'How about tomorrow?', {
+    const result = await AgentRegistry.callAgent('open_weather_map', 'How about tomorrow?', {
       sessionId: 'weather-test-session',
       isFollowup: true
     });
