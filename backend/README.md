@@ -125,18 +125,43 @@ API documentation is available at `/api/docs` when the application is running.
 
 ### Chat API
 
-- `POST /chat` - Send a message to the chatbot
+- `POST /chat` - **Unified intelligent chat endpoint**
+  - Automatically routes to the appropriate agent based on message content
+  - **Code Analysis:** Send code in ```code``` blocks for analysis and optimization
+  - **Research:** Ask questions requiring web search and summarization  
+  - **Document Q&A:** Ask questions about uploaded PDFs
+  - **Time/Weather:** Get current time and weather information
+  - **General Chat:** Regular conversation and topic-specific questions
   - Sessions are automatically managed through cookies
   - No need for the frontend to track or pass session IDs
   - The session is created automatically on first request
-  - Returns the AI response (the sessionId is returned but frontend doesn't need to use it)
+  - Returns the AI response with intelligent agent selection
 
 - `GET /chat/history` - Retrieve chat history for the current session (using cookie)
-- `GET /history` - Alternative endpoint to retrieve chat history for the current session
+- `POST /chat/upload` - Upload PDF documents for analysis and Q&A
 
-### Request Example
+### Request Examples
 
 ```json
+// Code Analysis
+// POST /chat
+{
+  "message": "Optimize this function:\n```javascript\nfunction fibonacci(n) {\n  if (n <= 1) return n;\n  return fibonacci(n-1) + fibonacci(n-2);\n}\n```"
+}
+
+// Research Question  
+// POST /chat
+{
+  "message": "What are the latest developments in AI?"
+}
+
+// Document Question
+// POST /chat  
+{
+  "message": "What are the key points in my uploaded PDF?"
+}
+
+// General Chat
 // POST /chat
 {
   "message": "Tell me about mangú"
@@ -147,7 +172,7 @@ API documentation is available at `/api/docs` when the application is running.
 
 ```json
 {
-  "reply": "Mangú is a traditional Dominican breakfast dish made from boiled and mashed plantains..."
+  "reply": "Based on code analysis, this fibonacci function uses recursion which can be optimized using dynamic programming..."
 }
 ```
 

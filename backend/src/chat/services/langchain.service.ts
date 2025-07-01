@@ -8,6 +8,7 @@ import { ChatOpenAI } from "@langchain/openai";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { RunnableLambda, RunnableWithMessageHistory } from "@langchain/core/runnables";
 import { TIME_AGENT_PROMPT, WEATHER_AGENT_PROMPT, GENERAL_AGENT_PROMPT, DOCUMENT_AGENT_PROMPT, RESEARCH_AGENT_PROMPT } from "../prompts/agent-prompts";
+import { AgentRegistry, AgentHandler } from "../agent-registry";
 import { ChromaClient } from 'chromadb';
 import { MongoDBChatMessageHistory } from "./mongodb.chat.message.history";
 import { InjectModel } from "@nestjs/mongoose";
@@ -123,25 +124,78 @@ export class LangChainService {
       },
     });
 
-    const tools = [searchTool, currentTimeTool, openWeatherMapTool, chromaTool];
-    const llmWithTools = llm.bindTools ? llm.bindTools(tools) : llm;
+
+    // --- AGENT REGISTRY PLUGIN PATTERN ---
+    // Register built-in agents/tools if not already registered
+    if (!AgentRegistry.getAgent('web_search')) {
+      AgentRegistry.register({
+        name: 'web_search',
+        description: searchTool.description,
+        handle: async (input, context, callAgent) => {
+          const result = await searchTool.func({ query: input }, context);
+          return { output: result, confidence: 0.8 };
+        }
+      });
+    }
+    if (!AgentRegistry.getAgent('document_search')) {
+      AgentRegistry.register({
+        name: 'document_search',
+        description: chromaTool.description,
+        handle: async (input, context, callAgent) => {
+          const result = await chromaTool.func({ question: input }, context);
+          return { output: result, confidence: 0.8 };
+        }
+      });
+    }
+    if (!AgentRegistry.getAgent('current_time')) {
+      AgentRegistry.register({
+        name: 'current_time',
+        description: currentTimeTool.description,
+        handle: async (input, context, callAgent) => {
+          const result = await currentTimeTool.func({ timezone: input }, context);
+          return { output: result, confidence: 0.9 };
+        }
+      });
+    }
+    if (!AgentRegistry.getAgent('open_weather_map')) {
+      AgentRegistry.register({
+        name: 'open_weather_map',
+        description: openWeatherMapTool.description,
+        handle: async (input, context, callAgent) => {
+          const result = await openWeatherMapTool.func({ location: input }, context);
+          return { output: result, confidence: 0.9 };
+        }
+      });
+    }
+
+    // Allow dynamic agent/skill registration via AgentRegistry
+    const dynamicTools = AgentRegistry.getAllAgents().map(agent =>
+      new DynamicStructuredTool({
+        name: agent.name,
+        description: agent.description,
+        schema: z.object({ input: z.string().describe("Input for the agent/skill/tool.") }),
+        func: async ({ input }, context) => {
+          const result = await agent.handle(input, context, AgentRegistry.callAgent);
+          return result.output;
+        }
+      })
+    );
+
+    const llmWithTools = llm.bindTools ? llm.bindTools(dynamicTools) : llm;
 
     const createAgentExecutor = (systemMessage: string, agentType: 'general' | 'specialized' = 'specialized'): AgentExecutor => {
       let finalSystemMessage = systemMessage;
-
-      // If topic is set, prepend a strict topic rule to ALL agents (not just general)
       if (topic) {
         finalSystemMessage = `Your most important rule is that you are an assistant dedicated ONLY to the topic of "${topic}". You must politely refuse any request that is not directly related to this topic.\n\n` + systemMessage;
       }
-
       const prompt = ChatPromptTemplate.fromMessages([
         ["system", finalSystemMessage],
         new MessagesPlaceholder("chat_history"),
         ["human", "{input}"],
         new MessagesPlaceholder("agent_scratchpad"),
       ]);
-      const agent = createToolCallingAgent({ llm: llmWithTools, tools, prompt });
-      return new AgentExecutor({ agent, tools, verbose: true });
+      const agent = createToolCallingAgent({ llm: llmWithTools, tools: dynamicTools, prompt });
+      return new AgentExecutor({ agent, tools: dynamicTools, verbose: true });
     };
 
     const timeAgent = createAgentExecutor(TIME_AGENT_PROMPT); // Defaults to 'specialized'
@@ -160,6 +214,8 @@ export class LangChainService {
         const timeKeywords = ['hora', 'time', 'fecha', 'date', 'día', 'dia'];
         const weatherKeywords = ['clima', 'temperatura', 'weather', 'pronóstico', 'forecast', 'tiempo'];
         const documentKeywords = ['documento', 'pdf', 'file', 'archivo', 'subido', 'upload'];
+        const codeKeywords = ['code', 'código', 'programming', 'programación', 'function', 'función', 'script', 'debug', 'error', 'optimize', 'optimizar', 'refactor', 'syntax', 'algorithm', 'algoritmo', 'class', 'method', 'variable', 'loop', 'if', 'else', 'import', 'export', 'const', 'let', 'var', 'async', 'await'];
+        const optimizationKeywords = ['optimize', 'optimizar', 'performance', 'rendimiento', 'faster', 'más rápido', 'improve', 'mejorar', 'efficient', 'eficiente', 'slow', 'lento', 'speed up', 'acelerar'];
         const researchKeywords = [
           "investiga", "busca en internet", "investigación", "research", "web_search", "buscar información", "averigua", "encuentra en la web",
           // Company info triggers
@@ -178,14 +234,58 @@ export class LangChainService {
           "near", "nearby", "around", "in the vicinity of", "close to",
           "for fun", "to have fun", "to enjoy", "to go out", "nightlife",
           "romantic", "romantics", "date", "dates", "couple", "couples",
-          "where can i have fun", "donde lo puedo pasar bien", "donde puedo divertirme", "donde puedo pasarla bien", "donde puedo disfrutar", "donde puedo salir", "donde puedo entretenerme", "donde puedo encontrar"
+          "where can i have fun", "donde lo puedo pasar bien", "donde puedo divertirme", "donde puedo pasarla bien", "donde puedo disfrujar", "donde puedo salir", "donde puedo entretenerme", "donde puedo encontrar"
         ];
 
         let selectedAgent: AgentExecutor;
 
+        // Check for code blocks (```code```) - if found, use code interpreter through agent registry
+        const hasCodeBlocks = /```[\s\S]*?```/.test(input.input);
+        
+        // Enhanced routing logic with agent registry integration
+        if (hasCodeBlocks) {
+          // Code interpretation via agent registry - this will automatically handle contextual search
+          try {
+            const codeResult = await AgentRegistry.callAgent('code_interpreter', input.input, {
+              userId: (config as any)?.configurable?.sessionId,
+              ...config
+            });
+            return { output: codeResult.output };
+          } catch (error) {
+            // Fallback to research agent if code interpreter fails
+            selectedAgent = researchAgent;
+          }
+        }
         // If the input contains any document/file-related keyword, force document_search
-        if (documentKeywords.some(k => lowerCaseInput.includes(k))) {
+        else if (documentKeywords.some(k => lowerCaseInput.includes(k))) {
           selectedAgent = documentAgent;
+        }
+        // If the input contains optimization keywords with code, use code-optimization agent
+        else if (optimizationKeywords.some(k => lowerCaseInput.includes(k)) && (hasCodeBlocks || codeKeywords.some(k => lowerCaseInput.includes(k)))) {
+          try {
+            const optimizationResult = await AgentRegistry.callAgent('code-optimization', input.input, {
+              userId: (config as any)?.configurable?.sessionId,
+              ...config
+            });
+            return { output: optimizationResult.output };
+          } catch (error) {
+            // Fallback to code interpreter or research agent
+            selectedAgent = codeKeywords.some(k => lowerCaseInput.includes(k)) ? researchAgent : generalAgent;
+          }
+        }
+        // If the input contains code-related keywords (without code blocks), use research with code context
+        else if (codeKeywords.some(k => lowerCaseInput.includes(k))) {
+          try {
+            // Use research agent for code-related questions without code blocks
+            const researchResult = await AgentRegistry.callAgent('research', input.input, {
+              userId: (config as any)?.configurable?.sessionId,
+              codeContext: true,
+              ...config
+            });
+            return { output: researchResult.output };
+          } catch (error) {
+            selectedAgent = researchAgent;
+          }
         }
         // If the input contains any time-related keyword, force time agent
         else if (timeKeywords.some(k => lowerCaseInput.includes(k))) {
@@ -195,9 +295,17 @@ export class LangChainService {
         else if (weatherKeywords.some(k => lowerCaseInput.includes(k))) {
           selectedAgent = weatherAgent;
         }
-        // If the input contains any research-related keyword, force research agent
+        // If the input contains any research-related keyword, use research agent via registry
         else if (researchKeywords.some(k => lowerCaseInput.includes(k))) {
-          selectedAgent = researchAgent;
+          try {
+            const researchResult = await AgentRegistry.callAgent('research', input.input, {
+              userId: (config as any)?.configurable?.sessionId,
+              ...config
+            });
+            return { output: researchResult.output };
+          } catch (error) {
+            selectedAgent = researchAgent;
+          }
         }
         // If the previous agent was time/weather/document, and the new input matches research keywords, use research agent
         else if ([timeAgent, weatherAgent, documentAgent].includes((input.chat_history.slice(-1)[0] as any)?.agent) && researchKeywords.some(k => lowerCaseInput.includes(k))) {

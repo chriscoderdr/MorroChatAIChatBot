@@ -1,0 +1,286 @@
+import { AgentRegistry } from "./agent-registry";
+
+// Helper interfaces for code analysis
+interface CodeAnalysis {
+  languages: Set<string>;
+  patterns: string[];
+  complexity: string;
+  issues: string[];
+  summary: string;
+}
+
+// Helper functions for code analysis
+const analyzeCode = async (codeBlocks: string[], question: string): Promise<CodeAnalysis> => {
+  const analysis: CodeAnalysis = {
+    languages: new Set<string>(),
+    patterns: [],
+    complexity: 'medium',
+    issues: [],
+    summary: ''
+  };
+  
+  for (const code of codeBlocks) {
+    // Detect programming language
+    const language = detectLanguage(code);
+    analysis.languages.add(language);
+    
+    // Analyze patterns and structure
+    const patterns = analyzePatterns(code, language);
+    analysis.patterns.push(...patterns);
+    
+    // Check for common issues
+    const issues = findCodeIssues(code, language);
+    analysis.issues.push(...issues);
+  }
+  
+  // Generate summary
+  analysis.summary = generateCodeSummary(codeBlocks, Array.from(analysis.languages));
+  
+  return analysis;
+};
+
+const detectLanguage = (code: string): string => {
+  const indicators = {
+    'javascript': ['const ', 'let ', 'var ', 'function ', '=>', 'console.log', 'require(', 'import '],
+    'typescript': ['interface ', 'type ', ': string', ': number', 'async ', 'Promise<'],
+    'python': ['def ', 'import ', 'from ', 'print(', 'if __name__', '#!/usr/bin/env python'],
+    'java': ['public class', 'private ', 'public static void main', 'System.out.'],
+    'csharp': ['using System', 'public class', 'Console.WriteLine', 'namespace '],
+    'cpp': ['#include', 'using namespace', 'std::', 'cout <<', 'int main('],
+    'sql': ['SELECT ', 'FROM ', 'WHERE ', 'INSERT INTO', 'UPDATE ', 'CREATE TABLE'],
+    'html': ['<html', '<div', '<script', '<!DOCTYPE'],
+    'css': ['{', '}', ':', ';', 'color:', 'background:'],
+    'shell': ['#!/bin/bash', 'echo ', 'cd ', 'ls ', 'grep ']
+  };
+  
+  for (const [lang, patterns] of Object.entries(indicators)) {
+    const score = patterns.reduce((count, pattern) => 
+      count + (code.toLowerCase().includes(pattern.toLowerCase()) ? 1 : 0), 0
+    );
+    if (score >= 2) return lang;
+  }
+  
+  return 'unknown';
+};
+
+const analyzePatterns = (code: string, language: string): string[] => {
+  const patterns: string[] = [];
+  
+  // Common patterns
+  if (code.includes('async') || code.includes('await')) patterns.push('asynchronous programming');
+  if (code.includes('class ') || code.includes('interface ')) patterns.push('object-oriented design');
+  if (code.includes('try') && code.includes('catch')) patterns.push('error handling');
+  if (code.includes('for ') || code.includes('while ') || code.includes('forEach')) patterns.push('loops and iteration');
+  if (code.includes('function') || code.includes('=>') || code.includes('def ')) patterns.push('function definitions');
+  
+  return patterns;
+};
+
+const findCodeIssues = (code: string, language: string): string[] => {
+  const issues: string[] = [];
+  
+  // Common issues across languages
+  if (code.includes('TODO') || code.includes('FIXME')) issues.push('Contains TODO/FIXME comments');
+  if (code.split('\n').length > 50) issues.push('Function/file may be too long');
+  if ((code.match(/if/g) || []).length > 5) issues.push('High cyclomatic complexity (many if statements)');
+  
+  // Language-specific issues
+  if (language === 'javascript' || language === 'typescript') {
+    if (code.includes('var ')) issues.push('Uses var instead of let/const');
+    if (code.includes('== ') && !code.includes('=== ')) issues.push('Uses loose equality (==) instead of strict (===)');
+  }
+  
+  if (language === 'python') {
+    if (!code.includes('def ') && code.length > 100) issues.push('Long script without function definitions');
+  }
+  
+  return issues;
+};
+
+const generateCodeSummary = (codeBlocks: string[], languages: string[]): string => {
+  const totalLines = codeBlocks.reduce((sum, code) => sum + code.split('\n').length, 0);
+  const langList = languages.length > 1 ? languages.join(', ') : languages[0] || 'unknown';
+  
+  return `Code contains ${codeBlocks.length} block(s) with ${totalLines} total lines in ${langList}`;
+};
+
+const shouldSearchForContext = (question: string, codeAnalysis: CodeAnalysis) => {
+  const webSearchKeywords = [
+    'best practice', 'performance', 'optimization', 'alternative', 'comparison',
+    'latest', 'modern', 'recommended', 'industry standard', 'documentation',
+    'tutorial', 'example', 'library', 'framework', 'tool', 'benchmark',
+    'security', 'vulnerability', 'pattern', 'design pattern', 'architecture'
+  ];
+  
+  const docSearchKeywords = [
+    'my project', 'our codebase', 'uploaded', 'document', 'specification',
+    'requirements', 'design', 'architecture', 'api', 'documentation'
+  ];
+  
+  const questionLower = question.toLowerCase();
+  
+  return {
+    web: webSearchKeywords.some(keyword => questionLower.includes(keyword)) ||
+         codeAnalysis.issues.length > 0 || // Search for solutions if issues found
+         questionLower.includes('how') || questionLower.includes('why'), // Search for explanatory content
+    docs: docSearchKeywords.some(keyword => questionLower.includes(keyword))
+  };
+};
+
+const buildSearchQuery = (question: string, codeAnalysis: CodeAnalysis): string => {
+  const languages = Array.from(codeAnalysis.languages).join(' ');
+  const patterns = codeAnalysis.patterns.slice(0, 2).join(' '); // Top 2 patterns
+  
+  // Create focused search query
+  return `${question} ${languages} ${patterns} programming best practices`;
+};
+
+const synthesizeAnswer = (codeAnalysis: CodeAnalysis, externalContext: string, question: string): string => {
+  let answer = `## Code Analysis\n\n`;
+  
+  // Code summary
+  answer += `**Summary:** ${codeAnalysis.summary}\n\n`;
+  
+  // Languages detected
+  if (codeAnalysis.languages.size > 0) {
+    answer += `**Languages:** ${Array.from(codeAnalysis.languages).join(', ')}\n\n`;
+  }
+  
+  // Patterns found
+  if (codeAnalysis.patterns.length > 0) {
+    answer += `**Patterns Detected:**\n${codeAnalysis.patterns.map(p => `- ${p}`).join('\n')}\n\n`;
+  }
+  
+  // Issues found
+  if (codeAnalysis.issues.length > 0) {
+    answer += `**Potential Issues:**\n${codeAnalysis.issues.map(i => `- ${i}`).join('\n')}\n\n`;
+  }
+  
+  // Answer to specific question
+  answer += `## Answer to Your Question\n\n`;
+  answer += generateSpecificAnswer(question, codeAnalysis);
+  
+  // External context if available
+  if (externalContext.trim()) {
+    answer += `\n\n## Additional Context${externalContext}`;
+  }
+  
+  return answer;
+};
+
+const generateSpecificAnswer = (question: string, codeAnalysis: CodeAnalysis): string => {
+  const questionLower = question.toLowerCase();
+  
+  if (questionLower.includes('what does') || questionLower.includes('explain')) {
+    return `This code appears to implement ${codeAnalysis.patterns.join(' and ')} using ${Array.from(codeAnalysis.languages).join('/')}. ${codeAnalysis.summary}`;
+  }
+  
+  if (questionLower.includes('improve') || questionLower.includes('optimize')) {
+    if (codeAnalysis.issues.length > 0) {
+      return `Based on the analysis, here are areas for improvement:\n${codeAnalysis.issues.map(i => `- ${i}`).join('\n')}\n\nConsider refactoring these areas for better code quality.`;
+    }
+    return `The code looks well-structured. Consider performance optimizations if needed, or adding more comprehensive error handling.`;
+  }
+  
+  if (questionLower.includes('error') || questionLower.includes('bug')) {
+    return `Looking at the code structure, potential issues include: ${codeAnalysis.issues.join(', ') || 'No obvious issues detected'}. Check for runtime errors and edge cases.`;
+  }
+  
+  return `Based on the code analysis, this ${Array.from(codeAnalysis.languages).join('/')} code implements ${codeAnalysis.patterns.join(', ')}. ${codeAnalysis.summary}`;
+};
+
+const calculateCodeConfidence = (codeBlocks: string[], question: string): number => {
+  let confidence = 0.5;
+  
+  // Higher confidence for larger, more structured code
+  const totalLines = codeBlocks.reduce((sum, code) => sum + code.split('\n').length, 0);
+  confidence += Math.min(0.3, totalLines / 100);
+  
+  // Higher confidence for specific questions
+  const specificKeywords = ['what', 'how', 'why', 'explain', 'improve', 'optimize', 'fix'];
+  if (specificKeywords.some(keyword => question.toLowerCase().includes(keyword))) {
+    confidence += 0.2;
+  }
+  
+  return Math.min(0.9, confidence);
+};
+
+AgentRegistry.register({
+  name: "code_interpreter",
+  description: "Analyzes code and answers questions about it. Can search for external context when needed.",
+  async handle(input, context, callAgent) {
+    try {
+      // Parse input to extract code and question
+      const codeBlockRegex = /```(?:[\w]*\n)?([\s\S]*?)```/g;
+      const codeBlocks: string[] = [];
+      let match;
+      
+      while ((match = codeBlockRegex.exec(input)) !== null) {
+        codeBlocks.push(match[1].trim());
+      }
+      
+      // Extract question (text outside code blocks)
+      const question = input.replace(/```[\s\S]*?```/g, '').trim();
+      
+      if (codeBlocks.length === 0) {
+        return {
+          output: "No code blocks found in your input. Please provide code using triple backticks (```) format.",
+          confidence: 0.2
+        };
+      }
+      
+      if (!question) {
+        return {
+          output: "Please provide a specific question about the code you submitted.",
+          confidence: 0.2
+        };
+      }
+      
+      // Step 1: Analyze the code
+      const codeAnalysis = await analyzeCode(codeBlocks, question);
+      
+      // Step 2: Determine if external context is needed
+      const needsExternalContext = shouldSearchForContext(question, codeAnalysis);
+      
+      let externalContext = "";
+      let searchConfidence = 0;
+      
+      if (needsExternalContext.web) {
+        // Call web_search agent for external information
+        const searchQuery = buildSearchQuery(question, codeAnalysis);
+        const searchResult = await callAgent("web_search", searchQuery, context);
+        externalContext += `\n\nWeb Search Results:\n${searchResult.output}`;
+        searchConfidence = searchResult.confidence || 0.7;
+      }
+      
+      if (needsExternalContext.docs && context?.userId) {
+        // Call document_search agent for user's uploaded documents
+        const docResult = await callAgent("document_search", question, context);
+        if (!docResult.output.includes("No relevant information found")) {
+          externalContext += `\n\nDocument Search Results:\n${docResult.output}`;
+          searchConfidence = Math.max(searchConfidence, docResult.confidence || 0.6);
+        }
+      }
+      
+      // Step 3: Combine code analysis and search results for final answer
+      const finalAnswer = synthesizeAnswer(codeAnalysis, externalContext, question);
+      
+      // Calculate confidence based on code analysis and external search
+      const codeConfidence = calculateCodeConfidence(codeBlocks, question);
+      const combinedConfidence = externalContext 
+        ? (codeConfidence * 0.6 + searchConfidence * 0.4)
+        : codeConfidence;
+      
+      return {
+        output: finalAnswer,
+        confidence: Math.min(0.95, combinedConfidence)
+      };
+      
+    } catch (error) {
+      return {
+        output: `Code analysis failed: ${(error as Error).message}`,
+        confidence: 0.1
+      };
+    }
+  }
+});

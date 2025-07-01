@@ -27,7 +27,27 @@ export class ChatController {
     return { success: true };
   }
 
-  @ApiOperation({ summary: 'Process a chat request' })
+  @ApiOperation({ 
+    summary: 'Process a chat request with intelligent agent routing',
+    description: `
+    This endpoint intelligently routes your message to the appropriate specialized agent:
+    
+    **Code Analysis:** Send code in \`\`\`code\`\`\` blocks with questions
+    Example: "Optimize this function: \`\`\`javascript\nfunction slow() {...}\n\`\`\`"
+    
+    **Research:** Ask questions requiring web search
+    Example: "What are the latest developments in AI?" or "Research company founders"
+    
+    **Document Questions:** Ask about uploaded PDFs
+    Example: "What does my uploaded document say about X?"
+    
+    **Time/Weather:** Get current information
+    Example: "What time is it in Santo Domingo?" or "Weather in New York"
+    
+    **General Chat:** Regular conversation
+    Example: "Tell me about Dominican food"
+    `
+  })
   @ApiResponse({
     status: 201,
     description: 'Chat processed successfully',

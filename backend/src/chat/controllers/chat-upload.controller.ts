@@ -6,6 +6,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { PdfVectorService } from '../services/pdf-vector.service';
 import { PdfRetrievalService } from '../services/pdf-retrieval.service';
 import { LangChainService } from '../services/langchain.service';
+import { AgentOrchestrator } from '../agent-orchestrator';
 import { Request } from 'express';
 
 
@@ -31,18 +32,26 @@ export class ChatUploadController {
 
     await this.pdfVectorService.vectorizeAndStorePdf(file.buffer, userId, message);
 
+
     let answer: string | undefined = undefined;
     if (message) {
-      // Embed the question using Gemini
-      const embedder = new (require('@langchain/google-genai').GoogleGenerativeAIEmbeddings)({ apiKey: process.env.GEMINI_API_KEY });
-      const [queryEmbedding] = await embedder.embedDocuments([message]);
-      // Retrieve similar chunks from Chroma
-      const results = await this.pdfRetrievalService.similaritySearch(userId, queryEmbedding, 5);
-      const contextChunks = (results.documents?.[0] || []).join('\n\n');
-      // Always use processChat so message history is persisted
-      const userPrompt = `Given the following document context, answer the user's question.\n\nContext:\n${contextChunks}\n\nQuestion: ${message}`;
-      const chatResult = await this.chatService.processChat(userPrompt, userId);
-      answer = chatResult.reply;
+      // Multi-agent orchestration: document_search -> summarizer
+      const steps = [
+        {
+          agent: 'document_search',
+          input: async () => message,
+        },
+        {
+          agent: 'summarizer',
+          input: async (prevResult) => prevResult || '',
+        },
+      ];
+      try {
+        const { results } = await AgentOrchestrator.runSteps(steps, { userId });
+        answer = results[results.length - 1].output;
+      } catch (err) {
+        answer = `Error during multi-agent orchestration: ${err.message}`;
+      }
     }
 
     return {
