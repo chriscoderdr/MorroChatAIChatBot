@@ -250,26 +250,29 @@ export class LangChainService {
         const extractLocationWithLLM = async (input: string): Promise<string> => {
           console.log(`Using LLM to extract location from: "${input}"`);
           
-          const extractionPrompt = `You are a location extraction assistant. Your task is to extract the city/location name from weather-related queries and format it properly for OpenWeatherMap API.
+          const extractionPrompt = `You are a location extraction assistant. Your task is to extract city/location names from weather-related queries and format them properly for OpenWeatherMap API.
 
 RULES:
-1. Extract ONLY the city/location name from the query
-2. Format as "City, Country" when possible (e.g., "Santo Domingo, DO", "New York, US")
-3. Use standard country codes (US, DO, ES, FR, etc.)
-4. If no country is specified, return just the city name
-5. Remove ALL question words, weather terms, and extra text
-6. Return ONLY the location, nothing else
+1. If query compares multiple locations (words like "compara", "compare", "vs", "versus", "con el de"), return locations separated by " | "
+2. For single location, extract ONLY the city/location name from the query
+3. Format as "City, Country" when possible (e.g., "Santo Domingo, DO", "New York, US")
+4. Use standard country codes (US, DO, ES, FR, JP, PH, etc.)
+5. If no country is specified, return just the city name
+6. Remove ALL question words, weather terms, and extra text
+7. Return ONLY the location(s), nothing else
 
 Examples:
 - "como esta el clima en santo domingo, dominican republic?" → "Santo Domingo, DO"
+- "compare weather in Manila Philippines with Santo Domingo" → "Manila, PH | Santo Domingo, DO"
+- "como se compara el clima en manila filipinas con el de santo domingo, dominican republic?" → "Manila, PH | Santo Domingo, DO"
 - "what's the weather in New York?" → "New York, US"
-- "weather in Paris France" → "Paris, FR"
+- "weather in Paris France vs London UK" → "Paris, FR | London, UK"
 - "clima en Madrid" → "Madrid, ES"
 - "temperature in Tokyo" → "Tokyo, JP"
 
 Query: "${input}"
 
-Location:`;
+Location(s):`;
 
           try {
             const extractionResult = await llm.invoke(extractionPrompt);
@@ -289,6 +292,75 @@ Location:`;
         };
         
         const cleanLocation = await extractLocationWithLLM(location);
+        
+        // Check if this is a comparison query (multiple locations separated by |)
+        if (cleanLocation.includes(' | ')) {
+          console.log('Detected comparison query, processing multiple locations');
+          const locations = cleanLocation.split(' | ').map(loc => loc.trim());
+          const weatherResults: string[] = [];
+          
+          // Get API key from config
+          const apiKey = this.configService.get<string>('OPENWEATHER_API_KEY');
+          if (!apiKey) {
+            console.error("OpenWeatherMap API key is missing from configuration");
+            return "OpenWeatherMap API key is missing.";
+          }
+          
+          // Helper function to fetch weather for a single location
+          const fetchSingleLocationWeather = async (singleLocation: string): Promise<string> => {
+            try {
+              console.log(`OpenWeatherMapTool: Fetching weather for "${singleLocation}"`);
+              
+              // First get geocoding data to convert location to coordinates
+              const geoUrl = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(singleLocation)}&limit=1&appid=${apiKey}`;
+              console.log(`Calling geocoding API for: ${singleLocation}`);
+              
+              const geoRes = await fetch(geoUrl);
+              if (!geoRes.ok) {
+                throw new Error(`Geocoding API error: HTTP ${geoRes.status}`);
+              }
+              
+              const geoData = await geoRes.json();
+              if (!geoData || geoData.length === 0) {
+                throw new Error(`Could not find location data for ${singleLocation}`);
+              }
+              
+              const { lat, lon, name, country } = geoData[0];
+              
+              // Get the actual weather data using coordinates
+              const weatherUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${apiKey}&lang=es`;
+              const weatherRes = await fetch(weatherUrl);
+              
+              if (!weatherRes.ok) {
+                throw new Error(`Weather API error: HTTP ${weatherRes.status}`);
+              }
+              
+              const weatherData = await weatherRes.json();
+              const { temp, feels_like, humidity } = weatherData.main;
+              const description = weatherData.weather[0].description;
+              const windSpeed = weatherData.wind?.speed || 'N/A';
+              
+              return `${name}, ${country}: ${description}. Temp: ${temp}°C (feels like ${feels_like}°C). Humidity: ${humidity}%. Wind: ${windSpeed} m/s.`;
+            } catch (error) {
+              console.error(`Error getting weather for ${singleLocation}: ${error.message}`);
+              return `Could not get weather for ${singleLocation}: ${error.message}`;
+            }
+          };
+          
+          // Get weather for each location
+          for (const loc of locations) {
+            const weatherResult = await fetchSingleLocationWeather(loc);
+            weatherResults.push(weatherResult);
+          }
+          
+          // Format comparison result
+          const isSpanish = location.toLowerCase().includes('compara') || location.toLowerCase().includes('clima');
+          if (isSpanish) {
+            return `Comparación del clima:\n\n${weatherResults.join('\n\n')}`;
+          } else {
+            return `Weather comparison:\n\n${weatherResults.join('\n\n')}`;
+          }
+        }
         
         // Get API key from config
         const apiKey = this.configService.get<string>('OPENWEATHER_API_KEY');
