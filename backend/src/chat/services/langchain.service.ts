@@ -389,11 +389,11 @@ export class LangChainService {
               ...context,
               configurable: {
                 ...(context?.configurable || {}),
-                sessionId
+                sessionId: context.sessionId || context.userId
               },
               metadata: {
                 ...(context?.metadata || {}),
-                sessionId
+                sessionId: context.sessionId || context.userId
               }
             });
             
@@ -491,8 +491,29 @@ export class LangChainService {
               }
             });
             
+            // Format the output and fix URLs with spaces
+            let output = typeof result === 'string' ? result : result.output;
+            
+            // Fix URLs with spaces by detecting URL patterns and encoding them properly
+            if (output && typeof output === 'string') {
+              output = output.replace(/(https?:\/\/[^\s"]+)\s+/g, (match, url) => {
+                // If the URL has spaces or unencoded characters, fix it
+                if (url.includes(' ') || /[^\w\-\.~:\/\?#\[\]@!\$&'\(\)\*\+,;=]/.test(url)) {
+                  try {
+                    // Try to properly encode the URL while preserving the URL structure
+                    const fixedUrl = url.replace(/\s+/g, '%20');
+                    return fixedUrl + ' ';
+                  } catch (e) {
+                    console.error('Error fixing URL:', e);
+                    return match; // Return original if encoding fails
+                  }
+                }
+                return match;
+              });
+            }
+            
             return { 
-              output: typeof result === 'string' ? result : result.output, 
+              output: output, 
               confidence: 0.8
             };
           } catch (error) {
@@ -684,12 +705,37 @@ export class LangChainService {
       return new AgentExecutor({ agent, tools: agentTools, verbose: true });
     };
 
+    // Make sure it processes and outputs in the same language as the query
+    const createDocumentAgent = (systemMessage: string): AgentExecutor => {
+      let finalSystemMessage = systemMessage;
+      if (topic) {
+        finalSystemMessage = `Your most important rule is that you are an assistant dedicated ONLY to the topic of "${topic}". You must politely refuse any request that is not directly related to this topic.\n\n` + systemMessage;
+      }
+      
+      // Add extra language enforcement to the system message
+      finalSystemMessage = `${finalSystemMessage}\n\nCRITICAL LANGUAGE INSTRUCTION: ALWAYS respond in the EXACT SAME language as the user's query. If the user asks in Spanish, you MUST respond in Spanish. If the user asks in English, respond in English. Automatically adapt to match the language of each query.`;
+      
+      const agentTools = documentTools;
+      console.log(`createDocumentAgent: Creating agent with ${agentTools.length} tools: ${agentTools.map(t => t.name).join(', ')}`);
+      const llmWithTools = llm.bindTools ? llm.bindTools(agentTools) : llm;
+      
+      const prompt = ChatPromptTemplate.fromMessages([
+        ["system", finalSystemMessage],
+        new MessagesPlaceholder("chat_history"),
+        ["human", "{input}"],
+        new MessagesPlaceholder("agent_scratchpad"),
+      ]);
+      const agent = createToolCallingAgent({ llm: llmWithTools, tools: agentTools, prompt });
+      return new AgentExecutor({ agent, tools: agentTools, verbose: true });
+    };
+
     const timeAgent = createAgentExecutor(TIME_AGENT_PROMPT, 'specialized', timeTools);
     const weatherAgent = createAgentExecutor(WEATHER_AGENT_PROMPT, 'specialized', weatherTools);
     // Always use the detailed RESEARCH_AGENT_PROMPT for the research agent, even with chat history
     const researchAgent = createAgentExecutor(RESEARCH_AGENT_PROMPT, 'specialized', researchTools);
     const generalAgent = createAgentExecutor(GENERAL_AGENT_PROMPT, 'general', generalTools);
-    const documentAgent = createAgentExecutor(DOCUMENT_AGENT_PROMPT, 'specialized', documentTools);      // This is our main runnable. It's a single Lambda that contains all the logic.
+    // Use our enhanced document agent creator for better language handling
+    const documentAgent = createDocumentAgent(DOCUMENT_AGENT_PROMPT);      // This is our main runnable. It's a single Lambda that contains all the logic.
     const finalRunnable = new RunnableLambda({
       func: async (input: { input: string; chat_history: BaseMessage[] }, config?: any) => {
         const lowerCaseInput = input.input.toLowerCase();

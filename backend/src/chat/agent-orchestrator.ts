@@ -20,6 +20,25 @@ export class AgentOrchestrator {
                        (response && typeof response.output === 'string') ? response.output : 
                        (response && typeof response.toString === 'function') ? response.toString() : '';
     
+    // Special handling for simple greetings
+    const isSimpleGreeting = this.isSimpleGreeting(input);
+    if (isSimpleGreeting) {
+      // For greetings, heavily penalize agents that return complex technical information
+      if (responseStr.includes("weather") || responseStr.includes("temperature") || 
+          responseStr.includes("clima") || responseStr.includes("temperatura") ||
+          responseStr.includes("current time") || responseStr.includes("timezone") ||
+          responseStr.includes("hora actual") || responseStr.includes("zona horaria")) {
+        completenessScore -= 0.8; // Heavy penalty for weather/time responses to greetings
+      }
+      
+      // For greetings, prefer simple conversational responses
+      if (responseStr.includes("¿En qué") || responseStr.includes("How can I") ||
+          responseStr.includes("What can I") || responseStr.includes("¿Cómo puedo") ||
+          responseStr.length < 50) {
+        completenessScore += 0.4; // Bonus for appropriate greeting responses
+      }
+    }
+    
     // Base score from confidence
     completenessScore += confidence * 0.5; // Lower weight from confidence, more focus on content
     
@@ -246,24 +265,34 @@ export class AgentOrchestrator {
     const boundCallAgent = AgentRegistry.callAgent.bind(AgentRegistry);
     
     // Create a system prompt to help the LLM understand the task
-    const systemPrompt = `You are an agent router. Your task is to analyze the user's query and determine which specialized agent would be best suited to handle it.
+    const systemPrompt = `You are an expert agent router. Your task is to analyze the user's query and determine which specialized agent would be best suited to handle it.
+
 Available agents:
 ${availableAgents.map(agent => `- ${agent}: ${this.getAgentDescription(agent)}`).join('\n')}
 
-IMPORTANT ROUTING RULES:
-1. For ANY queries about companies, businesses, organizations, products, or people (including their founding, creation, history):
-   - ALWAYS route to 'research' agent if available
-   - NEVER route to 'time', 'current_time', or 'weather' for these queries
+CRITICAL ROUTING RULES:
+1. For simple greetings (like "Hola", "Hello", "Hi", "Buenos días", etc.) or general conversation starters:
+   - ALWAYS route to 'general' agent
+   - NEVER route to specialized agents like 'weather', 'time', or 'research' for basic greetings
+   - Confidence should be HIGH (0.8-0.9) for clear greetings
 
-2. For factual questions that require up-to-date information or current events:
-   - ALWAYS route to 'research' agent if available
-   - NEVER route to 'time' or 'current_time' for these queries
+2. For weather queries (explicitly asking about weather, climate, temperature, etc.):
+   - Route to 'weather' or 'open_weather_map' agent only if the query clearly mentions weather terms
+   - Examples: "What's the weather like?", "How's the temperature?", "clima en Madrid"
 
-3. For queries that explicitly ask for the time or date:
-   - Route to 'time' or 'current_time'
+3. For time queries (explicitly asking for current time, date, timezone):
+   - Route to 'time' or 'current_time' agent only if the query clearly mentions time-related terms
+   - Examples: "What time is it?", "Current time in New York", "qué hora es"
 
-4. For simple greetings or general conversation:
-   - Route to 'general'
+4. For company/business/factual information queries:
+   - Route to 'research' agent if available
+   - Examples: "Who founded Apple?", "What does Microsoft do?"
+
+5. For document-related queries:
+   - Route to 'document_search' agent if available
+   - Examples: "What does my document say?", "según el documento"
+
+IMPORTANT: If the input is just a word that could be interpreted multiple ways (like "Hola" which is both a greeting and a place name), prioritize the most common interpretation (greeting) and route to 'general'.
 
 Based on the query, respond with a JSON object containing:
 1. "agentName": The name of the most appropriate agent from the available list
@@ -386,258 +415,97 @@ Only respond with the JSON object, nothing else.`;
       const prediction = await this.predictBestAgent(input, agentNames, context);
       console.log(`LLM predicted best agent: ${prediction.agentName} with confidence ${prediction.confidence}`);
       
-      // If prediction confidence is high enough, only use the predicted agent
-      // plus a few essential backup agents
-      let agentsToRun: string[] = [];
-      const highConfidenceThreshold = 0.75;
-      
-      if (prediction.confidence >= highConfidenceThreshold) {
-        // For high confidence predictions, only run the predicted agent
-        // plus general as a backup if available
-        agentsToRun = [prediction.agentName];
-        if (prediction.agentName !== 'general' && agentNames.includes('general')) {
-          agentsToRun.push('general');
-        }
-        console.log(`High confidence prediction, only running agents: ${agentsToRun.join(', ')}`);
-      } else if (prediction.confidence >= 0.6) {
-        // For medium confidence, run the predicted agent plus appropriate backups
-        agentsToRun = [prediction.agentName];
-        
-        // Add appropriate backup agents based on query type
-        if (queryTypes.includes('news') || queryTypes.includes('factual')) {
-          // Always prefer research for news and factual queries
-          if (prediction.agentName !== 'research' && agentNames.includes('research')) {
-            agentsToRun.push('research');
-          }
-        } else if (queryTypes.includes('time')) {
-          if (prediction.agentName !== 'time' && agentNames.includes('time')) {
-            agentsToRun.push('time');
+      // Special handling for simple greetings - force general agent
+      if (this.isSimpleGreeting(input)) {
+        console.log(`Detected simple greeting: "${input}" - forcing general agent`);
+        if (agentNames.includes('general')) {
+          try {
+            const generalResult = await this.runParallel(['general'], input, context);
+            return {
+              agent: 'general',
+              result: generalResult['general'],
+              all: generalResult
+            };
+          } catch (error) {
+            console.error('Error running general agent for greeting:', error);
           }
         }
-        
-        // Always add general as a fallback if not already included
-        if (!agentsToRun.includes('general') && agentNames.includes('general')) {
-          agentsToRun.push('general');
-        }
-        
-        console.log(`Medium confidence prediction, running selected agents: ${agentsToRun.join(', ')}`);
-      } else {      // For low confidence, use our previous filtering logic
-      agentsToRun = [...agentNames];
+      }
       
-      // Check if this is a company-related query
-      const isCompanyQuery = this.isCompanyRelatedQuery(input);
-      
-      // For news/current events queries or company-related queries, exclude time agent
-      if (((queryTypes.includes('news') || queryTypes.includes('factual')) && !queryTypes.includes('time')) || 
-          isCompanyQuery) {
-        const timeAgentNames = ['time', 'current_time'];
-        // Also filter out web_search if research is available
-        let agentsToFilter = [...timeAgentNames];
-        if (agentsToRun.includes('research') && agentsToRun.includes('web_search')) {
-          agentsToFilter.push('web_search');
-        }
+      // Use LLM prediction with high confidence (>= 0.6) to select single agent
+      if (prediction.confidence >= 0.6) {
+        console.log(`High confidence LLM prediction (${prediction.confidence}), using single agent: ${prediction.agentName}`);
         
-        // Only filter out agents if we have research as an alternative
-        if (agentsToRun.includes('research')) {
-          agentsToRun = agentsToRun.filter(name => !agentsToFilter.includes(name));
-          console.log(`Filtered out time/web_search agents for ${isCompanyQuery ? 'company' : 'news/factual'} query, using: ${agentsToRun.join(', ')}`);
+        try {
+          const singleAgentResult = await this.runParallel([prediction.agentName], input, context);
+          const result = singleAgentResult[prediction.agentName];
+          
+          // Verify the result is reasonable
+          if (result && result.output && result.output.length > 10) {
+            console.log(`Single agent ${prediction.agentName} provided good result`);
+            return {
+              agent: prediction.agentName,
+              result: result,
+              all: singleAgentResult
+            };
+          } else {
+            console.log(`Single agent ${prediction.agentName} result was insufficient, falling back to general`);
+          }
+        } catch (error) {
+          console.error(`Error running predicted agent ${prediction.agentName}:`, error);
         }
       }
-        
-        // Prioritize predicted agent by running it first in the list
-        if (agentsToRun.includes(prediction.agentName)) {
-          agentsToRun = [
-            prediction.agentName,
-            ...agentsToRun.filter(name => name !== prediction.agentName)
-          ];
-        }
-        
-        console.log(`Low confidence prediction, running filtered agents: ${agentsToRun.join(', ')}`);
+      
+      // For medium confidence (0.4-0.6) or fallback, run predicted agent + general as backup
+      let agentsToRun: string[] = [prediction.agentName];
+      if (prediction.agentName !== 'general' && agentNames.includes('general')) {
+        agentsToRun.push('general');
       }
+      
+      console.log(`Medium confidence or fallback, running minimal agents: ${agentsToRun.join(', ')}`);
       
       // Run selected agents and collect their results
       const allResults = await this.runParallel(agentsToRun, input, context);
       
       // Log confidence scores for debugging
-      console.log(`AgentOrchestrator confidence scores:`, 
+      console.log(`Agent results:`, 
         Object.entries(allResults).map(([name, result]) => 
-          `${name}: ${result.confidence ?? 'undefined'}`));
+          `${name}: confidence ${result.confidence ?? 'undefined'}, output length ${(result.output || '').length}`));
       
-      // Calculate completeness scores for better comparison
-      const completenessScores = Object.entries(allResults).map(([name, result]) => {
-        const completeness = this.evaluateResponseCompleteness(
-          result.output, 
-          result.confidence ?? 0,
-          input,
-          chatHistory
-        );
-        return { name, result, completeness };
-      });
-      
-      // Sort by completeness score
-      completenessScores.sort((a, b) => b.completeness - a.completeness);
-      
-      console.log(`Completeness scores:`, 
-        completenessScores.map(c => `${c.name}: ${c.completeness.toFixed(2)}`));
-      
-      // Special handling for fact-based follow-ups
-      if (isFactBasedFollowup && allResults['research']) {
-        const researchResult = allResults['research'];
-        const researchCompleteness = this.evaluateResponseCompleteness(
-          researchResult.output, 
-          researchResult.confidence ?? 0,
-          input,
-          chatHistory
-        );
-        
-        // If research agent has a reasonable response for a fact-based follow-up, use it
-        if (researchCompleteness >= 0.6) {
-          console.log(`Selected research agent for fact-based follow-up with completeness: ${researchCompleteness.toFixed(2)}`);
-          return {
-            agent: 'research',
-            result: researchResult,
-            all: allResults
-          };
-        }
+      // Trust the LLM prediction first
+      if (allResults[prediction.agentName]) {
+        const predictedResult = allResults[prediction.agentName];
+        console.log(`Using LLM-predicted agent: ${prediction.agentName}`);
+        return {
+          agent: prediction.agentName,
+          result: predictedResult,
+          all: allResults
+        };
       }
       
-      // Select the agent with the highest completeness score
-      let best = completenessScores[0];
-      
-      if (!best) {
-        console.error('No agent returned a result');
-        throw new Error('No agent returned a result');
+      // Fallback to general agent if available
+      if (allResults['general']) {
+        console.log(`Falling back to general agent`);
+        return {
+          agent: 'general',
+          result: allResults['general'],
+          all: allResults
+        };
       }
       
-      // Apply adaptive thresholds based on agent type
-      // These thresholds represent the minimum confidence needed for an agent to be considered
-      // answering the user's question completely and accurately
-      const agentThresholds: Record<string, number> = {
-        'general': 0.6,   // General agent can handle many things with moderate confidence
-        'weather': 0.4,   // Weather agent can be useful even with lower confidence
-        'time': 0.4,      // Time agent can be useful even with lower confidence
-        'current_time': 0.4, // Current time agent can be useful even with lower confidence
-        'open_weather_map': 0.4, // Weather agent can be useful even with lower confidence
-        'research': 0.55, // Lower threshold for research to make it more likely to be selected
-        'web_search': 0.5, // Even lower threshold for web search for news queries
-        'document_search': 0.6, // Document search should be reasonably confident
-        'summarizer': 0.85, // Summarizer should have very high confidence to be selected
-        'code_interpreter': 0.75, // Code interpreter should have high confidence
-        'code_optimization': 0.75, // Code optimization should have high confidence
-      };
-      
-      // Adjust thresholds based on query type - reuse the already calculated query types
-      if (queryTypes.includes('news') || queryTypes.includes('factual')) {
-        // For news/factual queries, make it easier for research/web_search to be selected
-        agentThresholds['research'] = 0.5;
-        agentThresholds['web_search'] = 0.45;
-        
-        // And make it harder for general and time agents
-        agentThresholds['general'] = 0.7;
-        agentThresholds['time'] = 0.75;
-        agentThresholds['current_time'] = 0.75;
+      // Last resort: use any available agent
+      const availableAgent = Object.keys(allResults)[0];
+      if (availableAgent) {
+        console.log(`Last resort: using ${availableAgent} agent`);
+        return {
+          agent: availableAgent,
+          result: allResults[availableAgent],
+          all: allResults
+        };
       }
       
-      // Get the appropriate threshold for the selected agent
-      const adjustedThreshold = agentThresholds[best.name] ?? threshold;
-      
-      // Check if this is a short input based on character/word count
-      const isShortInput = input.trim().length < 15 || input.trim().split(/\s+/).length < 5;
-      
-      // Evaluate if the input is likely a conversational turn rather than a complex query
-      // This is more about the structure than specific patterns
-      const isLikelyConversational = 
-        isShortInput || // Short inputs are often conversational
-        !input.includes('?') || // Non-questions are often conversational
-        input.split(/[.!?]/).length <= 2; // Few sentences suggests conversational
-      
-      // Special handling for the summarizer agent
-      if (best.name === 'summarizer') {
-        // Check if another agent has a good enough completeness score
-        const nextBest = completenessScores.find(c => c.name !== 'summarizer');
-        if (nextBest && (best.completeness - nextBest.completeness) < 0.2) {
-          console.log(`Choosing ${nextBest.name} over summarizer as the completeness difference is small: ${(best.completeness - nextBest.completeness).toFixed(2)}`);
-          best = nextBest;
-        }
-      }
-      
-      // Check if this is a company-related query that needs special handling
-      const isCompanyQuery = this.isCompanyRelatedQuery(input);
-      if (isCompanyQuery) {
-        console.log("Detected company-related query, giving preference to research agent");
-        
-        // Only try research agent for company queries (not web_search)
-        if (completenessScores.some(c => c.name === 'research')) {
-          const researchScore = completenessScores.find(c => c.name === 'research')!;
-          // Use research if it has a decent response
-          if (researchScore.completeness >= 0.6) {
-            console.log(`Selected research agent for company query with completeness: ${researchScore.completeness.toFixed(2)}`);
-            return {
-              agent: 'research',
-              result: researchScore.result,
-              all: allResults
-            };
-          }
-        }
-      }
-      
-      // Give priority to the predicted agent if its response is good enough
-      if (prediction.confidence >= 0.65 && completenessScores.some(c => c.name === prediction.agentName)) {
-        const predictedAgentScore = completenessScores.find(c => c.name === prediction.agentName)!;
-        
-        // For time/current_time agents, only use if it's actually a time query
-        const isTimeAgent = prediction.agentName === 'time' || prediction.agentName === 'current_time';
-        if (isTimeAgent && isCompanyQuery) {
-          console.log(`Rejecting time agent for company-related query despite high confidence`);
-        } else {
-          // Use predicted agent if its completeness score is reasonable
-          if (predictedAgentScore.completeness >= 0.65) {
-            console.log(`Using LLM-predicted agent ${prediction.agentName} with completeness: ${predictedAgentScore.completeness.toFixed(2)}`);
-            return {
-              agent: prediction.agentName,
-              result: predictedAgentScore.result,
-              all: allResults
-            };
-          }
-        }
-      }
-      
-      // Special handling for research agent
-      if (completenessScores.some(c => c.name === 'research')) {
-        const researchScore = completenessScores.find(c => c.name === 'research')!;
-        
-        // If research agent is reasonably good, prefer it for factual queries
-        if (researchScore.completeness >= 0.65 && (isFactBasedFollowup || queryTypes.includes('factual'))) {
-          console.log(`Selected research agent for factual query with completeness: ${researchScore.completeness.toFixed(2)}`);
-          return {
-            agent: 'research',
-            result: researchScore.result,
-            all: allResults
-          };
-        }
-      }
-      
-      // Special handling for news queries - always prefer research agent
-      if (queryTypes.includes('news') && completenessScores.some(c => c.name === 'research')) {
-        const researchScore = completenessScores.find(c => c.name === 'research')!;
-        
-        // For news queries, prefer research if it's reasonably complete
-        if (researchScore.completeness >= 0.6) {
-          console.log(`Selected research agent for news query with completeness: ${researchScore.completeness.toFixed(2)}`);
-          return {
-            agent: 'research',
-            result: researchScore.result,
-            all: allResults
-          };
-        }
-      }
-      
-      // Use the best agent by completeness
-      return { 
-        agent: best.name, 
-        result: best.result, 
-        all: allResults 
-      };
+      console.error('No agent returned a result');
+      throw new Error('No agent returned a result');
     } catch (error) {
       console.error('Error in routeByConfidence:', error);
       // Return a default response in case of error
@@ -821,5 +689,26 @@ Only respond with the JSON object, nothing else.`;
     }
     
     return false;
+  }
+
+  // Helper method to detect simple greetings
+  private static isSimpleGreeting(input: string): boolean {
+    const trimmedInput = input.trim().toLowerCase();
+    
+    // Common greetings in various languages
+    const greetings = [
+      'hola', 'hello', 'hi', 'hey', 'buenos días', 'buenas tardes', 'buenas noches',
+      'good morning', 'good afternoon', 'good evening', 'good night',
+      'howdy', 'what\'s up', 'qué tal', 'que tal', 'cómo estás', 'como estas',
+      'how are you', 'salut', 'bonjour', 'bonsoir', 'guten tag', 'guten morgen',
+      'konnichiwa', 'ohayo', 'こんにちは', 'おはよう', 'oi', 'olá', 'ola'
+    ];
+    
+    // Check if the input is just a greeting (with optional punctuation)
+    const cleanInput = trimmedInput.replace(/[!?.,]/g, '');
+    
+    return greetings.includes(cleanInput) || 
+           greetings.some(greeting => cleanInput === greeting) ||
+           (cleanInput.length <= 15 && greetings.some(greeting => cleanInput.startsWith(greeting)));
   }
 }
