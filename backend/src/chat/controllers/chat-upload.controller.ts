@@ -38,13 +38,13 @@ export class ChatUploadController {
     let answer: string | undefined = undefined;
     if (message) {
       try {
-        // Use the document agent directly for a clean, user-friendly response
-        const app = await this.langChainService.createLangChainApp();
-        const result = await app.invoke(
-          { input: message, chat_history: [] },
-          { configurable: { sessionId: userId } }
-        );
-        answer = result?.output || "Document uploaded successfully. You can now ask questions about it.";
+        // Add document upload context to chat history for proper routing
+        const documentContext = `[PDF Uploaded] ${file.originalname}`;
+        await this.chatService.addDocumentContext(userId, documentContext);
+        
+        // Now process the message through the normal chat flow with document context
+        const result = await this.chatService.processChat(message, userId);
+        answer = result.reply || "Document uploaded successfully. You can now ask questions about it.";
       } catch (err) {
         this.logger.error('Error processing document question:', err);
         answer = "Document uploaded successfully. You can now ask questions about it.";

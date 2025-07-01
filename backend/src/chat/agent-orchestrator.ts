@@ -252,6 +252,30 @@ export class AgentOrchestrator {
     return Object.fromEntries(results);
   }
 
+  // Helper method to run a single agent (more efficient than runParallel with one agent)
+  static async runSingleAgent(agentName: string, input: string, context: any = {}): Promise<AgentResult> {
+    console.log(`AgentOrchestrator.runSingleAgent: Processing agent '${agentName}'`);
+    
+    // Create a properly bound version of callAgent
+    const boundCallAgent = AgentRegistry.callAgent.bind(AgentRegistry);
+    const agentHandler = AgentRegistry.getAgent(agentName);
+    
+    if (!agentHandler) {
+      console.error(`Agent '${agentName}' not found in registry`);
+      throw new Error(`Agent '${agentName}' not found`);
+    }
+    
+    try {
+      return await agentHandler.handle(input, context, boundCallAgent);
+    } catch (error) {
+      console.error(`Error in agent '${agentName}':`, error);
+      return { 
+        output: `Error processing request with agent '${agentName}'.`, 
+        confidence: 0.1 
+      };
+    }
+  }
+
   // Use LLM to predict the best agent for a query
   private static async predictBestAgent(input: string, availableAgents: string[], context: any = {}): Promise<{agentName: string, confidence: number}> {
     // Ensure we have the general agent available for this prediction
@@ -276,25 +300,33 @@ CRITICAL ROUTING RULES:
    - NEVER route to specialized agents like 'weather', 'time', or 'research' for basic greetings
    - Confidence should be HIGH (0.8-0.9) for clear greetings
 
-2. For weather queries (explicitly asking about weather, climate, temperature, etc.):
+2. For document-related queries (HIGHEST PRIORITY):
+   - Route to 'document_search' agent if available for ANY document-related question
+   - Examples include: "what is this document about?", "what details does it have?", "according to the document", "summarize the document", "what does the PDF contain?", "tell me about my document"
+   - Also consider context: if previous messages mention document uploads or document content, follow-up questions like "what details does it have?" likely refer to the document
+   - Questions with pronouns like "it" or "this" in document contexts should route to document_search
+   - Confidence should be HIGH (0.8-0.95) for document queries
+
+3. For weather queries (explicitly asking about weather, climate, temperature, etc.):
    - Route to 'weather' or 'open_weather_map' agent only if the query clearly mentions weather terms
    - Examples: "What's the weather like?", "How's the temperature?", "clima en Madrid"
 
-3. For time queries (explicitly asking for current time, date, timezone):
+4. For time queries (explicitly asking for current time, date, timezone):
    - Route to 'time' or 'current_time' agent only if the query clearly mentions time-related terms
    - Examples: "What time is it?", "Current time in New York", "qué hora es"
 
-4. For company/business/factual information queries:
+5. For company/business/factual information queries:
    - Route to 'research' agent if available
    - Examples: "Who founded Apple?", "What does Microsoft do?"
 
-5. For document-related queries:
-   - Route to 'document_search' agent if available
-   - Examples: "What does my document say?", "según el documento"
+6. Context Awareness:
+   - Analyze the conversation history for document mentions, uploads, or previous document discussions
+   - If the conversation context suggests the user is asking about a previously mentioned document, route to 'document_search'
+   - Consider pronouns and implicit references in context
 
 IMPORTANT: If the input is just a word that could be interpreted multiple ways (like "Hola" which is both a greeting and a place name), prioritize the most common interpretation (greeting) and route to 'general'.
 
-Based on the query, respond with a JSON object containing:
+Based on the query and conversation context, respond with a JSON object containing:
 1. "agentName": The name of the most appropriate agent from the available list
 2. "confidence": A number between 0-1 representing your confidence in this selection
 3. "reasoning": A brief explanation of why you selected this agent
@@ -340,6 +372,28 @@ Only respond with the JSON object, nothing else.`;
         }
       }
       
+      // Fallback: Extract agent name from text response
+      const agentNameMatch = responseStr.match(/`([^`]+)` agent|(\w+) agent/i);
+      if (agentNameMatch) {
+        const predictedAgent = agentNameMatch[1] || agentNameMatch[2];
+        if (availableAgents.includes(predictedAgent)) {
+          console.log(`LLM predicted agent from text: ${predictedAgent} with confidence 0.8`);
+          return {
+            agentName: predictedAgent,
+            confidence: 0.8
+          };
+        }
+      }
+      
+      // Check for specific mentions of document_search in response
+      if (responseStr.includes('document_search') && availableAgents.includes('document_search')) {
+        console.log(`LLM mentioned document_search agent, using it with confidence 0.9`);
+        return {
+          agentName: 'document_search',
+          confidence: 0.9
+        };
+      }
+      
       // Fallback classification if parsing fails
       const queryTypes = this.classifyQueryType(input);
       for (const type of queryTypes) {
@@ -376,7 +430,7 @@ Only respond with the JSON object, nothing else.`;
       'current_time': 'Provides current time, date, and timezone information.',
       'weather': 'Provides weather forecasts and current conditions for specific locations.',
       'open_weather_map': 'Provides detailed weather information using OpenWeatherMap data.',
-      'document_search': 'Searches through user-provided documents to find relevant information.',
+      'document_search': 'CRITICAL: Searches through user-uploaded documents to find specific information. Use this agent for ANY query that asks about documents, uploaded files, or content within documents. This includes questions like "what is this document about?", "what details does it have?", "according to the document", etc. This agent has access to the user\'s uploaded documents.',
       'summarizer': 'Summarizes long pieces of text or content.',
       'code_interpreter': 'Analyzes, explains, and executes code snippets.',
       'code_optimization': 'Optimizes and improves existing code.'
@@ -401,6 +455,32 @@ Only respond with the JSON object, nothing else.`;
         });
       }
       
+      // Check for document context in the conversation
+      const hasDocumentContext = this.hasDocumentContextInHistory(chatHistory);
+      console.log(`Document context check: hasDocumentContext=${hasDocumentContext}, chatHistory=${JSON.stringify(chatHistory)}`);
+      console.log(`Is document query: ${this.isDocumentRelatedQuery(input, chatHistory)}`);
+      console.log(`Available agents include document_search: ${agentNames.includes('document_search')}`);
+      
+      if (hasDocumentContext && this.isDocumentRelatedQuery(input, chatHistory) && agentNames.includes('document_search')) {
+        console.log(`Detected document-related query with context: "${input}" - using document_search agent directly`);
+        try {
+          // Create a properly bound version of callAgent
+          const boundCallAgent = AgentRegistry.callAgent.bind(AgentRegistry);
+          const documentAgent = AgentRegistry.getAgent('document_search');
+          
+          if (documentAgent) {
+            const result = await documentAgent.handle(input, context, boundCallAgent);
+            return {
+              agent: 'document_search',
+              result: result,
+              all: { 'document_search': result }
+            };
+          }
+        } catch (error) {
+          console.error('Error running document_search agent:', error);
+        }
+      }
+      
       // Determine if this is a follow-up to a fact-based question
       const isFactBasedFollowup = this.isFactualFollowUpQuery(input, chatHistory);
       if (isFactBasedFollowup && agentNames.includes('research')) {
@@ -420,11 +500,11 @@ Only respond with the JSON object, nothing else.`;
         console.log(`Detected simple greeting: "${input}" - forcing general agent`);
         if (agentNames.includes('general')) {
           try {
-            const generalResult = await this.runParallel(['general'], input, context);
+            const generalResult = await this.runSingleAgent('general', input, context);
             return {
               agent: 'general',
-              result: generalResult['general'],
-              all: generalResult
+              result: generalResult,
+              all: { 'general': generalResult }
             };
           } catch (error) {
             console.error('Error running general agent for greeting:', error);
@@ -437,16 +517,15 @@ Only respond with the JSON object, nothing else.`;
         console.log(`High confidence LLM prediction (${prediction.confidence}), using single agent: ${prediction.agentName}`);
         
         try {
-          const singleAgentResult = await this.runParallel([prediction.agentName], input, context);
-          const result = singleAgentResult[prediction.agentName];
+          const singleAgentResult = await this.runSingleAgent(prediction.agentName, input, context);
           
           // Verify the result is reasonable
-          if (result && result.output && result.output.length > 10) {
+          if (singleAgentResult && singleAgentResult.output && singleAgentResult.output.length > 10) {
             console.log(`Single agent ${prediction.agentName} provided good result`);
             return {
               agent: prediction.agentName,
-              result: result,
-              all: singleAgentResult
+              result: singleAgentResult,
+              all: { [prediction.agentName]: singleAgentResult }
             };
           } else {
             console.log(`Single agent ${prediction.agentName} result was insufficient, falling back to general`);
@@ -710,5 +789,102 @@ Only respond with the JSON object, nothing else.`;
     return greetings.includes(cleanInput) || 
            greetings.some(greeting => cleanInput === greeting) ||
            (cleanInput.length <= 15 && greetings.some(greeting => cleanInput.startsWith(greeting)));
+  }
+
+  // Helper method to check if conversation history contains document context
+  private static hasDocumentContextInHistory(chatHistory: string[]): boolean {
+    if (chatHistory.length === 0) return false;
+    
+    // Look for document-related mentions in recent history
+    const recentHistory = chatHistory.slice(-5); // Check last 5 messages
+    
+    for (const message of recentHistory) {
+      if (message && (
+        message.includes('[PDF Uploaded]') ||
+        message.includes('document') ||
+        message.includes('PDF') ||
+        message.includes('file') ||
+        message.includes('uploaded') ||
+        message.includes('attachment') ||
+        message.toLowerCase().includes('documento') ||
+        message.toLowerCase().includes('archivo')
+      )) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  // Helper method to detect if a query is document-related
+  private static isDocumentRelatedQuery(input: string, chatHistory: string[] = []): boolean {
+    const lowercaseInput = input.toLowerCase();
+    
+    // Direct document references
+    const directDocumentKeywords = [
+      'document', 'documento', 'pdf', 'file', 'archivo',
+      'uploaded', 'attachment', 'paper', 'texto'
+    ];
+    
+    if (directDocumentKeywords.some(keyword => lowercaseInput.includes(keyword))) {
+      return true;
+    }
+    
+    // Document-related question patterns
+    const documentQuestionPatterns = [
+      /what.*this.*about/i,
+      /what.*document.*about/i,
+      /de que.*trata/i,
+      /según.*documento/i,
+      /according.*document/i,
+      /what.*details.*it.*have/i,
+      /what.*details.*does.*have/i,
+      /qué.*detalles.*tiene/i,
+      /summarize.*this/i,
+      /resume.*esto/i,
+      /tell.*me.*about.*this/i,
+      /what.*contains/i,
+      /what.*says/i,
+      /qué.*dice/i,
+      /what.*information/i,
+      /qué.*información/i
+    ];
+    
+    if (documentQuestionPatterns.some(pattern => input.match(pattern))) {
+      return true;
+    }
+    
+    // Context-based detection: pronouns with document context
+    if (this.hasDocumentContextInHistory(chatHistory)) {
+      const contextualPronouns = [
+        /^what.*it/i,
+        /^what.*this/i,
+        /^what.*does.*it/i,
+        /^what.*details/i,
+        /^tell.*me.*about/i,
+        /^qué.*tiene/i,
+        /^de.*qué/i,
+        /^sobre.*qué/i,
+        /^what.*about/i
+      ];
+      
+      if (contextualPronouns.some(pattern => input.match(pattern))) {
+        return true;
+      }
+      
+      // Very short questions that likely refer to context
+      if (input.length < 30 && (
+        lowercaseInput.includes('what') ||
+        lowercaseInput.includes('qué') ||
+        lowercaseInput.includes('details') ||
+        lowercaseInput.includes('detalles') ||
+        lowercaseInput.includes('about') ||
+        lowercaseInput.includes('sobre')
+      )) {
+        return true;
+      }
+    }
+    
+    return false;
   }
 }

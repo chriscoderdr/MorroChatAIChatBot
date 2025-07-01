@@ -101,6 +101,21 @@ export class ChatService {
     return this.chatSessionRepository.getSessionHistory(userId);
   }
 
+  async addDocumentContext(userId: string, documentInfo: string): Promise<void> {
+    try {
+      // Add document upload context to MongoDB chat history
+      const mongoHistory = new MongoDBChatMessageHistory(this.chatSessionModel, userId);
+      
+      // Add a system message indicating document upload
+      const { HumanMessage } = await import('@langchain/core/messages');
+      await mongoHistory.addMessage(new HumanMessage(documentInfo));
+      
+      this.logger.log(`Added document context for user ${userId}: ${documentInfo}`);
+    } catch (error) {
+      this.logger.error(`Error adding document context: ${error.message}`, error.stack);
+    }
+  }
+
   async processChat(userMessage: string, userId: string): Promise<{ reply: string }> {
     console.log(`=== CHAT SERVICE: Processing message "${userMessage}" for user ${userId} ===`);
     return withSessionMutex(userId, async () => {
