@@ -83,6 +83,7 @@ export class ChatService {
   }
 
   async processChat(userMessage: string, userId: string): Promise<{ reply: string }> {
+    console.log(`=== CHAT SERVICE: Processing message "${userMessage}" for user ${userId} ===`);
     return withSessionMutex(userId, async () => {
       await this.getOrCreateSession(userId);
       const reply = await this.invoke(userMessage, userId);

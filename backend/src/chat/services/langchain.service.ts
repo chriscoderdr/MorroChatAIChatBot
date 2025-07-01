@@ -25,7 +25,19 @@ export class LangChainService {
   constructor(
     private readonly configService: ConfigService,
     @InjectModel(ChatSession.name) private chatSessionModel: Model<ChatSession>,
-  ) { }
+  ) {
+    // Initialize and register built-in agents immediately
+    this.initializeBuiltInAgents();
+  }
+
+  private async initializeBuiltInAgents() {
+    // Initialize the langchain app once to register all built-in agents
+    try {
+      await this.createLangChainApp();
+    } catch (error) {
+      this.logger.error('Failed to initialize built-in agents', error);
+    }
+  }
 
   async createLangChainApp(topic?: string) {
     const provider = this.configService.get<string>('ai.provider') || 'gemini';
@@ -46,17 +58,25 @@ export class LangChainService {
     // ChromaDB document retrieval tool
     const chromaTool = new DynamicStructuredTool({
       name: "document_search",
-      description: "Use this tool for ANY question about the user's uploaded PDF, document, or file, including questions like: 'What is the main topic of the PDF I uploaded?', 'Summarize my document', 'What does my file say about X?', 'What is the summary of the uploaded file?', 'What are the key points in my document?', 'What is the uploaded PDF about?', 'What topics are covered in my file?', etc. Use this tool whenever the user refers to 'the PDF I uploaded', 'my document', 'uploaded file', 'the file', or similar phrases, even if the question is not directly about the file name.",
+      description: "Use this tool for ANY question about the user's uploaded PDF, document, or file, including questions like: 'What is the main topic of the PDF I uploaded?', 'Summarize my document', 'What does my file say about X?', 'What is the summary of the uploaded file?', 'What are the key points in my document?', 'What is the uploaded PDF about?', 'What topics are covered in my file?', 'según el documento', 'segun el documento', 'en el documento', 'el documento dice', 'menciona el documento', 'de acuerdo al documento', etc. Use this tool whenever the user refers to 'the PDF I uploaded', 'my document', 'uploaded file', 'the file', 'según el documento', 'segun el documento', 'en el documento', or similar phrases, even if the question is not directly about the file name.",
       schema: z.object({ question: z.string().describe("A question about the user's uploaded document, PDF, or file.") }),
       func: async ({ question }, config) => {
-        // Extract sessionId from config.configurable.sessionId (as used by /chat service)
-        let sessionId = (config as any)?.metadata?.sessionId || (config as any)?.configurable?.sessionId;
-        console.log(`configurable: ${JSON.stringify((config as any))}`);
-        console.log(`chromaTool: Processing document search for session ID: ${sessionId}`);
+        // Extract sessionId from config - check multiple possible locations
+        let sessionId = (config as any)?.metadata?.sessionId || 
+                       (config as any)?.configurable?.sessionId ||
+                       (config as any)?.userId ||
+                       (config as any)?.configurable?.userId;
         if (!sessionId) return "No session ID provided.";
+        
         // Embed the question
         const embedder = new (require('@langchain/google-genai').GoogleGenerativeAIEmbeddings)({ apiKey: process.env.GEMINI_API_KEY });
         const [queryEmbedding] = await embedder.embedDocuments([question]);
+        
+        // Extract keywords from the question for hybrid search
+        const keywords = question.toLowerCase()
+          .replace(/[^\w\s]/g, ' ')
+          .split(/\s+/)
+          .filter(word => word.length > 2 && !['que', 'qué', 'del', 'los', 'las', 'una', 'and', 'the', 'for', 'with'].includes(word));
         // Query ChromaDB for this user (parse CHROMA_URL like PdfVectorService)
         const chromaUrl = process.env.CHROMA_URL || "";
         const logger = this.logger || console;
@@ -74,22 +94,114 @@ export class LangChainService {
         const chroma = new ChromaClient({ host, port, ssl });
         const collectionName = `user_${sessionId}`;
         const collection = await chroma.getOrCreateCollection({ name: collectionName });
-        // Use similarity search: only return the most similar chunks (not all parts)
-        const nResults = 5;
-        const results = await collection.query({ queryEmbeddings: [queryEmbedding], nResults, include: ["metadatas", "documents", "distances"] });
-        const docs = results.documents?.[0] || [];
-        const metadatas = results.metadatas?.[0] || [];
-        const distances = results.distances?.[0] || [];
-        if (!docs.length) return "No relevant information found in your uploaded document.";
-        // Build a detailed context with metadata for only the most similar chunks
-        let context = docs.map((doc, i) => {
-          const meta = metadatas[i] || {};
-          const dist = distances[i];
+        
+        // Extract question keywords for hybrid search
+        const questionKeywords = this.extractQuestionKeywords(question);
+        console.log(`chromaTool: Question keywords:`, questionKeywords);
+        
+        // Perform semantic search
+        const semanticNResults = 20; // Increased for better coverage
+        const semanticResults = await collection.query({ queryEmbeddings: [queryEmbedding], nResults: semanticNResults, include: ["metadatas", "documents", "distances"] });
+        
+        // Perform advanced hybrid ranking
+        let allDocs = semanticResults.documents?.[0] || [];
+        let allMetadatas = semanticResults.metadatas?.[0] || [];
+        let allDistances = semanticResults.distances?.[0] || [];
+
+        console.log(`chromaTool: Query results:`, JSON.stringify({
+          docsCount: allDocs.length,
+          firstDoc: allDocs[0]?.substring(0, 100) + '...',
+          distances: allDistances.slice(0, 5)
+        }, null, 2));
+        
+        // Advanced scoring with multiple factors
+        const hybridResults = allDocs.map((doc, i) => {
+          const metadata = allMetadatas[i] || {};
+          let score = allDistances[i] || 1.0;
+          const docLower = (doc || '').toLowerCase();
+          
+          // Factor 1: Keyword matching boost
+          const keywordMatches = questionKeywords.filter(keyword => 
+            docLower.includes(keyword.toLowerCase())
+          ).length;
+          if (keywordMatches > 0) {
+            score = score * (1 - (keywordMatches * 0.15)); // Up to 45% boost for 3+ keywords
+          }
+          
+          // Factor 2: Content type relevance
+          const contentTypeBoost = this.getContentTypeBoost(metadata.contentType as string || 'general', question);
+          score = score * (1 - contentTypeBoost);
+          
+          // Factor 3: Key terms matching
+          const keyTerms = typeof metadata.keyTerms === 'string' ? 
+            metadata.keyTerms.split(',').filter(term => term.trim()) : [];
+          const keyTermMatches = keyTerms.filter(term => 
+            questionKeywords.some(qk => qk.toLowerCase().includes(term.toLowerCase()) || 
+                                      term.toLowerCase().includes(qk.toLowerCase()))
+          ).length;
+          if (keyTermMatches > 0) {
+            score = score * (1 - (keyTermMatches * 0.1)); // Additional boost for key terms
+          }
+          
+          // Factor 4: Document structure preference
+          const structureBoost = this.getStructureBoost(metadata, docLower);
+          score = score * (1 - structureBoost);
+          
+          // Factor 5: Content length preference (medium-length chunks often contain complete thoughts)
+          const lengthBoost = this.getLengthBoost(doc?.length || 0);
+          score = score * (1 - lengthBoost);
+          
+          return {
+            doc,
+            metadata,
+            distance: Math.max(0, score),
+            keywordMatches,
+            keyTermMatches,
+            contentTypeBoost,
+            structureBoost,
+            lengthBoost,
+            originalDistance: allDistances[i] || 1.0
+          };
+        });
+        
+        console.log(`chromaTool: Enhanced hybrid search results:`, JSON.stringify({
+          docsCount: hybridResults.length,
+          avgDistance: (hybridResults.reduce((sum, r) => sum + r.distance, 0) / hybridResults.length).toFixed(3),
+          avgOriginalDistance: (hybridResults.reduce((sum, r) => sum + r.originalDistance, 0) / hybridResults.length).toFixed(3),
+          keywordBoosts: hybridResults.filter(r => r.keywordMatches > 0).length,
+          keyTermBoosts: hybridResults.filter(r => r.keyTermMatches > 0).length
+        }, null, 2));
+        
+        if (!hybridResults.length) return "No relevant information found in your uploaded document.";
+        
+        // Sort by enhanced distance score and take top results
+        hybridResults.sort((a, b) => a.distance - b.distance);
+        const topResults = hybridResults.slice(0, 10); // Increased to 10 best results
+        
+        console.log(`chromaTool: Top results with enhanced scoring:`, topResults.map(r => ({
+          distance: r.distance.toFixed(3),
+          original: r.originalDistance.toFixed(3),
+          keywords: r.keywordMatches,
+          keyTerms: r.keyTermMatches,
+          contentType: r.metadata.contentType
+        })));
+        
+        // Build a clean, user-friendly context without technical metadata
+        let context = topResults.map((result, i) => {
+          const { doc } = result;
           const safeDoc = doc ?? '';
-          // Return a string that includes all relevant info for the agent to process
-          return `--- Chunk Source: ${meta.source ?? 'N/A'}, Chunk Number: ${meta.chunk ?? i}, Distance: ${dist?.toFixed(3) ?? 'N/A'} ---\\n${safeDoc}`;        }).join("\\n\\n");
-        // Return ONLY the context. The agent will formulate the answer.
-        return context;      },
+          
+          // Return only the clean document content without any technical information
+          return safeDoc.trim();
+        }).join("\n\n");
+        
+        // If we have results, just return the clean content
+        if (context.trim()) {
+          console.log(`chromaTool: Returning clean context with ${topResults.length} chunks`);
+          return context;
+        } else {
+          return "No relevant information found in your uploaded document.";
+        }      },
     });
     const currentTimeTool = new DynamicStructuredTool({
       name: "current_time",
@@ -123,7 +235,6 @@ export class LangChainService {
         } catch (error) { return `An error occurred while fetching weather for ${location}.`; }
       },
     });
-
 
     // --- AGENT REGISTRY PLUGIN PATTERN ---
     // Register built-in agents/tools if not already registered
@@ -196,6 +307,7 @@ export class LangChainService {
       }
       
       const agentTools = tools || generalTools;
+      console.log(`createAgentExecutor: Creating agent with ${agentTools.length} tools: ${agentTools.map(t => t.name).join(', ')}`);
       const llmWithTools = llm.bindTools ? llm.bindTools(agentTools) : llm;
       
       const prompt = ChatPromptTemplate.fromMessages([
@@ -229,7 +341,20 @@ export class LangChainService {
           'tell me the time', 'current local time', 'local time'
         ];
         const weatherKeywords = ['clima', 'temperatura', 'weather', 'pronóstico', 'forecast', 'llover', 'lluvia', 'rain', 'snow', 'nieve', 'cloudy', 'nublado', 'sunny', 'soleado', 'cold', 'frío', 'hot', 'calor', 'wind', 'viento'];
-        const documentKeywords = ['documento', 'pdf', 'file', 'archivo', 'subido', 'upload'];
+        const documentKeywords = [
+          'documento', 'pdf', 'file', 'archivo', 'subido', 'upload', 'uploaded',
+          'constitución', 'constitution', 'artículo', 'article', 
+          'mi documento', 'my document', 'el documento', 'the document',
+          'documento que subí', 'document I uploaded', 'archivo que subí',
+          'texto subido', 'uploaded text', 'contenido subido',
+          // Additional Spanish document references
+          'según el documento', 'segun el documento', 'según el archivo', 'segun el archivo',
+          'en el documento', 'en el archivo', 'en el pdf', 'en el texto',
+          'el documento dice', 'el archivo dice', 'el texto dice',
+          'menciona el documento', 'dice el documento', 'indica el documento',
+          'según lo que dice', 'segun lo que dice', 'de acuerdo al documento',
+          'conforme al documento', 'basado en el documento', 'en base al documento'
+        ];
         const codeKeywords = ['code', 'código', 'programming', 'programación', 'function', 'función', 'script', 'debug', 'error', 'optimize', 'optimizar', 'refactor', 'syntax', 'algorithm', 'algoritmo', 'class', 'method', 'variable', 'loop', 'if', 'else', 'import', 'export', 'const', 'let', 'var', 'async', 'await'];
         const optimizationKeywords = ['optimize', 'optimizar', 'performance', 'rendimiento', 'faster', 'más rápido', 'improve', 'mejorar', 'efficient', 'eficiente', 'slow', 'lento', 'speed up', 'acelerar'];
         const researchKeywords = [
@@ -238,7 +363,7 @@ export class LangChainService {
           "fundador", "founder", "fundadores", "founders", "año de fundación", "año fundación", "año de creacion", "año de creación", "año de inicio",
           "fecha de fundación", "fecha de creacion", "fecha de creación", "industry", "ramo", "sector", "actividad principal", "empresa", "compañía", "company",
           // Location/places/travel/tourism/experience triggers
-          "donde", "lugares", "sitios", "qué hacer", "que hacer", "places to visit", "things to do", "where can i", "what to do", "recommend", "recomienda", "atracciones", "turismo", "viajar", "visitar", "restaurantes", "bares", "vida nocturna",
+          "donde", "lugares", "sitios", "qué hacer en", "que hacer en", "places to visit", "things to do", "where can i", "what to do", "recommend", "recomienda", "atracciones", "turismo", "viajar", "visitar", "restaurantes", "bares", "vida nocturna",
           // Expanded tourism/outing/romantic/fun triggers
           "cerca de", "alrededor de", "en las proximidades de", "en las cercanías de",
           "para divertirme", "para divertirse", "para pasarla bien", "para pasar bien", "pasar bien", "divertirme", "divertirse", "disfrutar", "entretenerme", "entretenerse", "salir",
@@ -274,6 +399,7 @@ export class LangChainService {
         }
         // If the input contains any document/file-related keyword, force document_search
         else if (documentKeywords.some(k => lowerCaseInput.includes(k))) {
+          console.log(`LangChain routing: Selected DOCUMENT agent for input: "${lowerCaseInput}" (matched keywords: ${documentKeywords.filter(k => lowerCaseInput.includes(k)).join(', ')})`);
           selectedAgent = documentAgent;
         }
         // If the input contains optimization keywords with code, use code-optimization agent
@@ -417,5 +543,117 @@ export class LangChainService {
     });
 
     return agentWithHistory;
+  }
+
+  /**
+   * Register built-in agents in the AgentRegistry
+   * This ensures they are available when pluggable agents need to call them
+   */
+
+  /**
+   * Extracts keywords from the user's question for better matching
+   */
+  private extractQuestionKeywords(question: string): string[] {
+    const questionLower = question.toLowerCase();
+    const keywords: string[] = [];
+    
+    // Extract article/section references
+    const articleRefs = questionLower.match(/artículo\s+\d+|article\s+\d+/g);
+    if (articleRefs) {
+      keywords.push(...articleRefs);
+    }
+    
+    // Extract important question words
+    const importantWords = questionLower
+      .replace(/[^\w\s]/g, ' ')
+      .split(/\s+/)
+      .filter(word => 
+        word.length > 3 && 
+        !['what', 'como', 'donde', 'cuando', 'porque', 'cual', 'quien', 'dice', 'trata', 'contiene', 'sobre', 'acerca'].includes(word)
+      );
+    
+    keywords.push(...importantWords);
+    
+    // Add question-specific terms
+    if (questionLower.includes('constitución') || questionLower.includes('constitution')) {
+      keywords.push('constitución', 'constitution');
+    }
+    
+    return [...new Set(keywords)];
+  }
+
+  /**
+   * Gets content type boost based on question intent
+   */
+  private getContentTypeBoost(contentType: string, question: string): number {
+    const questionLower = question.toLowerCase();
+    
+    // If asking about specific articles, boost article content
+    if ((questionLower.includes('artículo') || questionLower.includes('article')) && contentType === 'article') {
+      return 0.2; // 20% boost
+    }
+    
+    // If asking about definitions, boost definition content
+    if ((questionLower.includes('definición') || questionLower.includes('definition') || questionLower.includes('qué es')) && contentType === 'definition') {
+      return 0.15;
+    }
+    
+    // If asking about procedures, boost procedure content
+    if ((questionLower.includes('procedimiento') || questionLower.includes('cómo') || questionLower.includes('proceso')) && contentType === 'procedure') {
+      return 0.15;
+    }
+    
+    // Headers are generally important for overview questions
+    if ((questionLower.includes('trata') || questionLower.includes('sobre') || questionLower.includes('resumen')) && contentType === 'header') {
+      return 0.1;
+    }
+    
+    return 0;
+  }
+
+  /**
+   * Gets structure boost based on document metadata
+   */
+  private getStructureBoost(metadata: any, docLower: string): number {
+    let boost = 0;
+    
+    // Prefer chunks that start with headers (complete sections)
+    if (metadata.startsWithHeader) {
+      boost += 0.1;
+    }
+    
+    // Prefer chunks with article references
+    if (metadata.hasArticleReference) {
+      boost += 0.1;
+    }
+    
+    // Prefer chunks with numbers (often contain specific information)
+    if (metadata.hasNumbers) {
+      boost += 0.05;
+    }
+    
+    return boost;
+  }
+
+  /**
+   * Gets length boost based on chunk size (prefer medium-sized chunks)
+   */
+  private getLengthBoost(length: number): number {
+    // Prefer chunks between 800-2000 characters (complete thoughts but not too long)
+    if (length >= 800 && length <= 2000) {
+      return 0.1;
+    }
+    
+    // Slight preference for longer chunks over very short ones
+    if (length >= 500 && length < 800) {
+      return 0.05;
+    }
+    
+    // Penalize very short chunks (likely incomplete)
+    if (length < 200) {
+      return -0.1; // Actually increase distance (worse score)
+    }
+    
+    return 0;
   }
 }

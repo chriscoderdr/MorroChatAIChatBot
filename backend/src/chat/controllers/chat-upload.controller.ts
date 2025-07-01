@@ -1,4 +1,4 @@
-import { Res, Get } from '@nestjs/common';
+import { Res, Get, Logger } from '@nestjs/common';
 import { ChatService } from '../services/chat.service';
 import { Controller, Post, UploadedFile, UseInterceptors, Body, Req } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -12,6 +12,8 @@ import { Request } from 'express';
 
 @Controller('chat')
 export class ChatUploadController {
+  private readonly logger = new Logger(ChatUploadController.name);
+
   constructor(
     private readonly pdfVectorService: PdfVectorService,
     private readonly pdfRetrievalService: PdfRetrievalService,
@@ -35,22 +37,17 @@ export class ChatUploadController {
 
     let answer: string | undefined = undefined;
     if (message) {
-      // Multi-agent orchestration: document_search -> summarizer
-      const steps = [
-        {
-          agent: 'document_search',
-          input: async () => message,
-        },
-        {
-          agent: 'summarizer',
-          input: async (prevResult) => prevResult || '',
-        },
-      ];
       try {
-        const { results } = await AgentOrchestrator.runSteps(steps, { userId });
-        answer = results[results.length - 1].output;
+        // Use the document agent directly for a clean, user-friendly response
+        const app = await this.langChainService.createLangChainApp();
+        const result = await app.invoke(
+          { input: message, chat_history: [] },
+          { configurable: { sessionId: userId } }
+        );
+        answer = result?.output || "Document uploaded successfully. You can now ask questions about it.";
       } catch (err) {
-        answer = `Error during multi-agent orchestration: ${err.message}`;
+        this.logger.error('Error processing document question:', err);
+        answer = "Document uploaded successfully. You can now ask questions about it.";
       }
     }
 

@@ -1,71 +1,154 @@
-// Enhanced Summarizer agent plugin
+// summarizer.agent.ts - LLM-powered summarization and text analysis agent
 import { AgentRegistry } from "./agent-registry";
+import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 
 AgentRegistry.register({
   name: "summarizer",
-  description: "Intelligently summarizes text, research results, or any content into concise, actionable insights.",
-  handle: async (input: string, context, callAgent) => {
+  description: "Uses LLM intelligence to summarize and analyze text with sophisticated understanding of context and requirements.",
+  handle: async (input, context, callAgent) => {
     try {
-      if (!input || input.trim().length < 20) {
-        return { 
-          output: "The provided text is too short to create a meaningful summary.", 
-          confidence: 0.2 
-        };
-      }
+      // Create a focused prompt for the summarization task
+      const summaryPrompt = `You are an expert text analyst and summarizer. Your task is to intelligently process and analyze the following text according to the specific requirements.
 
-      // Enhanced summarization logic
-      const text = input.trim();
-      const words = text.split(/\s+/);
-      
-      // Determine summary length based on input length
-      let summaryLength;
-      if (words.length < 100) summaryLength = Math.max(10, Math.floor(words.length * 0.7));
-      else if (words.length < 500) summaryLength = Math.max(30, Math.floor(words.length * 0.3));
-      else summaryLength = Math.max(50, Math.floor(words.length * 0.2));
-      
-      // Extract key sentences (simple heuristic)
-      const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 10);
-      
-      let summary;
-      if (sentences.length <= 3) {
-        // Short text - just clean it up
-        summary = text.substring(0, summaryLength * 6) + (text.length > summaryLength * 6 ? "..." : "");
-      } else {
-        // Longer text - extract key sentences and important phrases
-        const keySentences = sentences
-          .filter(sentence => {
-            const s = sentence.toLowerCase();
-            // Prioritize sentences with important indicators
-            return s.includes('important') || s.includes('key') || s.includes('main') ||
-                   s.includes('significant') || s.includes('result') || s.includes('conclusion') ||
-                   s.includes('therefore') || s.includes('however') || s.includes('because') ||
-                   sentence.length > 20; // Prefer longer, more substantial sentences
-          })
-          .slice(0, 5); // Take top 5 key sentences
+TEXT TO ANALYZE:
+${input}
+
+INSTRUCTIONS:
+1. If this is a research analysis prompt (contains "USER'S QUESTION", "SEARCH RESULTS", etc.), follow those specific instructions exactly.
+2. If this is a general summarization request, provide a clear, concise summary that captures the key information.
+3. Maintain the appropriate language (Spanish/English) based on the context and user's language.
+4. Focus on factual information and avoid speculation.
+5. Provide natural, conversational responses without technical metadata or formatting artifacts.
+6. If analyzing search results for a specific question, extract only the information that directly answers that question.
+7. If the search results don't contain sufficient information to answer the question completely, start your response with "NEED_MORE_SEARCH: [specific search query]" followed by your partial answer.
+8. CRITICAL: Your response must NEVER include any of the following:
+   - "THOUGHT:" sections or your internal thinking process
+   - "ACTION:" sections or what actions you're taking
+   - "OBSERVATION:" sections or what you're noticing
+   - References to "web_search" or any technical tool details
+   - Phrases like "According to the search results" or "The information shows"
+9. MOST IMPORTANT: Only include your FINAL ANSWER, not your reasoning process.
+10. The final output should be a clean, human-like response as if directly answering the user.
+
+Provide your analysis or summary:`;
+
+      // Try to use LLM if available
+      try {
+        let result = '';
+        // First try using the context LLM if available
+        if (context?.llm) {
+          const response = await context.llm.invoke(summaryPrompt);
+          result = response.content.toString().trim();
+        } 
+        // Next try using Gemini API directly
+        else if (context?.geminiApiKey || process.env.GEMINI_API_KEY) {
+          const llm = new ChatGoogleGenerativeAI({ 
+            apiKey: context?.geminiApiKey || process.env.GEMINI_API_KEY, 
+            model: context?.geminiModel || process.env.GEMINI_MODEL || 'gemini-1.5-flash', 
+            temperature: 0.3
+          });
+          
+          const response = await llm.invoke(summaryPrompt);
+          result = response.content.toString().trim();
+        }
         
-        if (keySentences.length > 0) {
-          summary = keySentences.join('. ').trim();
-          if (!summary.endsWith('.')) summary += '.';
-        } else {
-          // Fallback to first few sentences
-          summary = sentences.slice(0, 3).join('. ').trim();
-          if (!summary.endsWith('.')) summary += '.';
+        if (result) {
+          // Clean up the LLM response to make it user-friendly
+          // Stronger regex patterns to remove thinking process completely
+          result = result
+            // First, try to extract just the FINAL ANSWER section if it exists
+            .replace(/^[\s\S]*?FINAL ANSWER:\s*([\s\S]*)$/i, '$1')
+            // Remove any multi-line thought/action/observation blocks
+            .replace(/^THOUGHT:.*?(?=ACTION:|OBSERVATION:|FINAL ANSWER:|$)/gsim, '')
+            .replace(/^ACTION:.*?(?=OBSERVATION:|THOUGHT:|FINAL ANSWER:|$)/gsim, '')
+            .replace(/^OBSERVATION:.*?(?=ACTION:|THOUGHT:|FINAL ANSWER:|$)/gsim, '')
+            // Remove individual lines with search commands
+            .replace(/^Executing web_search.*?(?=\n|$)/gmi, '')
+            .replace(/^I'll search for.*?(?=\n|$)/gmi, '')
+            .replace(/^I need to search.*?(?=\n|$)/gmi, '')
+            // Remove other similar patterns
+            .replace(/^Let me search for.*?(?=\n|$)/gmi, '')
+            .replace(/^Let's search for.*?(?=\n|$)/gmi, '')
+            .replace(/^I should search for.*?(?=\n|$)/gmi, '')
+            .replace(/^Let me use.*?(?=\n|$)/gmi, '')
+            .replace(/^I will use.*?(?=\n|$)/gmi, '')
+            .replace(/^Using web_search.*?(?=\n|$)/gmi, '')
+            // Remove specific keywords
+            .replace(/THOUGHT:?/gi, '')
+            .replace(/ACTION:?/gi, '')
+            .replace(/OBSERVATION:?/gi, '')
+            .replace(/web_search/gi, '')
+            .replace(/\bTOOL\b/gi, '')
+            .replace(/\bQUERY\b/gi, '')
+            // Remove "according to..." type phrases
+            .replace(/According to (?:the|my|our) (?:search|web|)? ?results,?\s*/gi, '')
+            .replace(/Based on (?:the|my|our) (?:search|web|)? ?results,?\s*/gi, '')
+            .replace(/The (?:search|web|)? ?results indicate,?\s*/gi, '')
+            .replace(/From the information provided,?\s*/gi, '')
+            .replace(/From what I found,?\s*/gi, '')
+            .replace(/According to what I found,?\s*/gi, '')
+            .replace(/The information shows,?\s*/gi, '')
+            .trim();
+          
+          return {
+            output: result,
+            confidence: 0.9
+          };
+        }
+      } catch (llmError) {
+        console.error("Error using LLM for summarization:", llmError);
+        // Continue to fallback pattern matching
+      }
+      
+      // Pattern matching fallback if LLM methods failed
+      if (input.includes("USER'S QUESTION") && input.includes("SEARCH RESULTS")) {
+        // Extract the user's question and search results
+        const questionMatch = input.match(/USER'S QUESTION:\s*(.*?)\n/);
+        const resultsMatch = input.match(/SEARCH RESULTS:\s*(.*?)(?=\n\nINSTRUCTIONS:)/s);
+        
+        if (questionMatch && resultsMatch) {
+          const question = questionMatch[1].trim();
+          const searchResults = resultsMatch[1].trim();
+          
+          // Simple extraction logic for common patterns
+          const isSpanish = /quién|quien|cuándo|cuando|qué|que|año|empresa|fundó|creó/.test(question.toLowerCase());
+          
+          // Look for founding dates, names, and relevant information in the search results
+          const foundingYearMatch = searchResults.match(/\b(19\d{2}|20\d{2})\b/);
+          const nameMatches = searchResults.match(/\b[A-ZÁÉÍÓÚ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚ][a-záéíóúñ]+)*\b/g);
+          
+          if (question.toLowerCase().includes('fundó') || question.toLowerCase().includes('founded')) {
+            if (foundingYearMatch) {
+              const year = foundingYearMatch[0];
+              return {
+                output: isSpanish 
+                  ? `Según la información encontrada, fue fundada en ${year}.`
+                  : `According to the information found, it was founded in ${year}.`,
+                confidence: 0.8
+              };
+            }
+          }
+          
+          // If we can't extract specific information, indicate we need more search
+          return {
+            output: `NEED_MORE_SEARCH: ${question} específicos detalles`,
+            confidence: 0.6
+          };
         }
       }
       
-      // Calculate confidence based on text quality and length
-      const confidence = Math.min(0.95, 
-        0.3 + (words.length / 1000) * 0.4 + (sentences.length / 10) * 0.3
-      );
+      // For general summarization, provide a simple summary based on rules
+      const sentences = input.split(/[.!?]+/).filter(s => s.trim().length > 10).slice(0, 5);
+      const basicSummary = sentences.join('. ');
       
-      return { 
-        output: summary, 
-        confidence: confidence 
-      };
-      
-    } catch (error) {
       return {
-        output: `Summarization failed: ${error.message}`,
+        output: basicSummary.length > 300 ? basicSummary.substring(0, 300) + '...' : basicSummary,
+        confidence: 0.7
+      };
+    } catch (error) {
+      console.error("Summarizer agent error:", error);
+      return {
+        output: `Analysis failed: ${error.message}`,
         confidence: 0.1
       };
     }
