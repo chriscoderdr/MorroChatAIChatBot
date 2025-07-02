@@ -1,10 +1,40 @@
 import { AgentRegistry } from "./agent-registry";
 import { Logger } from "@nestjs/common";
+import { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { ChatOpenAI } from "@langchain/openai";
+
+// Helper method to check if documents are available in chat context
+const hasDocumentContext = (context: any): boolean => {
+  return context.chatHistory && context.chatHistory.some((msg: any) => 
+    msg.content && (
+      msg.content.includes('[PDF Uploaded]') || 
+      msg.content.includes('[Document Uploaded]') ||
+      msg.content.includes('[File Uploaded]') ||
+      msg.content.includes('.pdf') ||
+      msg.content.includes('.docx') ||
+      msg.content.includes('.txt')
+    )
+  );
+};
+
+// Get a description of each agent for the LLM to understand its purpose
+const getAgentDescription = (agentName: string): string => {
+  const descriptions: Record<string, string> = {
+    'general': 'A general-purpose conversational agent for a wide range of topics.',
+    'research': 'Provides detailed factual information by searching the web. Handles companies, news, people, and knowledge-based topics.',
+    'time': 'Provides current time, date, and timezone information.',
+    'weather': 'Provides weather forecasts and current conditions.',
+    'document_search': 'Searches through user-uploaded documents to find specific information.',
+    'summarizer': 'Summarizes long pieces of text or content.',
+    'code_interpreter': 'Analyzes, explains, and executes code snippets.',
+    'code_optimization': 'Optimizes and improves existing code.'
+  };
+  return descriptions[agentName] || `Agent that handles ${agentName}-related queries`;
+};
 
 /**
  * Dedicated routing agent for predicting the best agent to handle a user query.
- * This agent is specifically designed to return JSON routing decisions without
- * any conversational behavior that might interfere with the routing process.
+ * This agent is self-contained and returns a JSON routing decision.
  */
 AgentRegistry.register({
   name: 'routing',
@@ -13,69 +43,60 @@ AgentRegistry.register({
     const logger = new Logger('RoutingAgent');
     
     try {
-      // Extract the routing parameters from context
-      const { availableAgents, systemPrompt } = context;
+      const { availableAgents, llm } = context;
       
       if (!availableAgents || !Array.isArray(availableAgents)) {
-        logger.error('Missing availableAgents in routing context');
         throw new Error('Invalid routing context: missing availableAgents');
       }
-      
-      if (!systemPrompt) {
-        logger.error('Missing systemPrompt in routing context');
-        throw new Error('Invalid routing context: missing systemPrompt');
+      if (!llm || typeof llm.invoke !== 'function') {
+        throw new Error('Invalid routing context: missing llm instance');
       }
+
+      const hasDocuments = hasDocumentContext(context);
+
+      const systemPrompt = `CRITICAL: You are a JSON-only routing API. You MUST return ONLY a JSON object. NO conversational text.
+
+AVAILABLE AGENTS:
+${availableAgents.map(agent => `- ${agent}: ${getAgentDescription(agent)}`).join('\n')}
+
+USER QUERY: "${input}"
+${context.chatHistory && context.chatHistory.length > 0 ? `\nCONTEXT: ${context.chatHistory.slice(-2).map((msg: any) => `${msg.type}: ${msg.content}`).join(', ')}` : ''}
+${hasDocuments ? '\n⚠️  DOCUMENT CONTEXT DETECTED: User has uploaded documents. For ambiguous queries, prefer document_search agent.' : ''}
+
+ROUTING RULES (STRICT PRIORITY ORDER):
+1. Personal/conversational queries (greetings, introductions) → general
+2. Time queries ("time", "date", "today") → time
+3. Weather queries ("weather", "temperature") → weather
+4. Explicit document queries ("document", "what is this about") → document_search
+5. Research queries (companies, people, facts) → research
+6. Code queries → code_interpreter
+7. Ambiguous queries WITH document context → document_search
+8. Everything else → general
+
+MANDATORY RESPONSE FORMAT - RESPOND WITH ONLY THIS JSON:
+{"agentName": "agent_name", "confidence": 0.85, "reasoning": "brief reason"}
+
+DO NOT WRITE ANY OTHER TEXT. ONLY JSON.`;
+
+      logger.log(`Routing agent analyzing query: "${input.substring(0, 50)}..."`);
       
-      logger.log(`Routing agent analyzing query: "${input.substring(0, 50)}${input.length > 50 ? '...' : ''}"`);
-      logger.log(`Available agents: ${availableAgents.join(', ')}`);
-      
-      // Use a specialized LLM service configured specifically for routing
-      // This agent should use a different model or configuration that's optimized for JSON responses
-      const routingContext = {
-        ...context,
-        // Override any existing system prompts to ensure strict JSON routing
-        systemPrompt: systemPrompt,
-        // Set parameters for deterministic, focused responses
-        temperature: 0.1, // Low temperature for more deterministic responses
-        maxTokens: 200,   // Limit response length to prevent rambling
-        stopSequences: ['\n\n', 'Human:', 'Assistant:'], // Stop early to prevent conversational responses
-        // Force JSON mode if the underlying LLM supports it
-        responseFormat: 'json',
-        // Disable any conversational features
-        conversational: false,
-        // Add routing-specific metadata
-        routingMode: true,
-        agentType: 'routing'
-      };
-      
-      // Call the LLM service directly for routing (assuming we have a general LLM agent)
-      const generalAgent = AgentRegistry.getAgent('general');
-      if (!generalAgent) {
-        logger.error('General agent not available for routing LLM calls');
-        throw new Error('General agent not available for routing');
+      let result;
+      if (llm instanceof ChatOpenAI) {
+        const boundLLM = llm.bind({
+          response_format: { type: "json_object" },
+        });
+        result = await boundLLM.invoke(systemPrompt);
+      } else {
+        result = await llm.invoke(systemPrompt);
       }
+      const output = result.content.toString();
       
-      // Make the LLM call with routing-specific context
-      const result = await generalAgent.handle(input, routingContext, callAgent);
+      logger.log(`Routing agent raw LLM response: ${output}`);
       
-      if (!result || !result.output) {
-        logger.error('Routing agent received empty response from LLM');
-        throw new Error('Empty response from routing LLM');
-      }
-      
-      logger.log(`Routing agent raw LLM response: ${result.output}`);
-      
-      // The routing agent should return the raw LLM response for further processing
-      // The agent orchestrator will handle JSON parsing and validation
-      return {
-        output: result.output,
-        confidence: result.confidence || 0.8
-      };
+      return { output, confidence: 0.9 };
       
     } catch (error) {
       logger.error(`Error in routing agent: ${error.message}`, error.stack);
-      
-      // Return a structured error that can be handled by the orchestrator
       return {
         output: JSON.stringify({
           error: 'routing_failed',

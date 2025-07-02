@@ -84,265 +84,41 @@ export class AgentOrchestrator {
     }
   }
 
-  // Use pure LLM to predict the best agent for a query
+  // Use the routing agent to predict the best agent for a query
   private static async predictBestAgent(input: string, availableAgents: string[], context: any = {}): Promise<{ agentName: string, confidence: number }> {
-    console.log('Starting pure LLM-based agent prediction');
-    
     const routingAgent = AgentRegistry.getAgent('routing');
     if (!routingAgent) {
-      console.warn('Routing agent not available for agent prediction, using fallback');
+      console.warn('Routing agent not available, using fallback.');
       return { 
-        agentName: availableAgents.includes('research') ? 'research' : 
-                  availableAgents.includes('general') ? 'general' : availableAgents[0], 
+        agentName: availableAgents.includes('research') ? 'research' : 'general', 
         confidence: 0.5 
       };
     }
 
-    const hasDocuments = this.hasDocumentContext(context);
-
-    // Create a focused system prompt that forces JSON-only responses
-    const systemPrompt = `CRITICAL: You are a JSON-only routing API. You MUST return ONLY a JSON object. NO conversational text.
-
-AVAILABLE AGENTS:
-${availableAgents.map(agent => `- ${agent}: ${this.getAgentDescription(agent)}`).join('\n')}
-
-USER QUERY: "${input}"
-${context.chatHistory && context.chatHistory.length > 0 ? `\nCONTEXT: ${context.chatHistory.slice(-2).map((msg: any) => `${msg.type}: ${msg.content}`).join(', ')}` : ''}
-${hasDocuments ? '\n⚠️  DOCUMENT CONTEXT DETECTED: User has uploaded documents in this session. For ambiguous queries without clear subject, prefer document_search agent.' : ''}
-
-ROUTING RULES (STRICT PRIORITY ORDER):
-1. Personal/conversational queries (names, greetings, relationships, introductions) → general agent
-2. Time queries ("hora", "time", "día", "today", "hoy") → time agent  
-3. Weather queries ("clima", "weather", "temperature") → open_weather_map agent
-4. Explicit document queries ("document", "documento", "de que trata", "what is this document") → document_search agent
-5. Research queries (companies, people, facts) → research agent
-6. Code queries → code_interpreter agent
-7. Ambiguous queries WITH document context → document_search agent
-8. Everything else → general agent
-
-MANDATORY RESPONSE FORMAT - RESPOND WITH ONLY THIS JSON:
-{"agentName": "agent_name", "confidence": 0.85, "reasoning": "brief reason"}
-
-DO NOT WRITE ANY OTHER TEXT. DO NOT BE CONVERSATIONAL. ONLY JSON.`;
-
     try {
-      const boundCallAgent = AgentRegistry.callAgent.bind(AgentRegistry);
-      const result = await routingAgent.handle(
-        input,
-        { 
-          ...context, 
-          systemPrompt,
-          availableAgents,
-          // Routing-specific parameters
-          temperature: 0.1,
-          maxTokens: 200,
-          responseFormat: 'json'
-        },
-        boundCallAgent
-      );
+      const result = await routingAgent.handle(input, { ...context, availableAgents }, AgentRegistry.callAgent);
+      const prediction = JSON.parse(result.output);
 
-      console.log(`Raw routing agent response: ${result.output}`);
-
-      // Check if the routing agent returned an error
-      try {
-        const errorCheck = JSON.parse(result.output);
-        if (errorCheck.error === 'routing_failed') {
-          console.error('Routing agent returned error:', errorCheck.message);
-          throw new Error(errorCheck.message);
-        }
-      } catch (e) {
-        // Not an error JSON, continue with normal processing
+      if (prediction.error) {
+        throw new Error(prediction.message);
       }
 
-      // Try multiple JSON extraction approaches
-      let jsonData: any = null;
-      const responseStr = result.output || '';
-
-      // Method 1: Direct JSON parse
-      try {
-        jsonData = JSON.parse(responseStr.trim());
-      } catch (e) {
-        // Method 2: Extract from code blocks
-        const codeBlockMatch = responseStr.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-        if (codeBlockMatch) {
-          try {
-            jsonData = JSON.parse(codeBlockMatch[1].trim());
-          } catch (e2) {
-            console.error('Code block JSON parse failed:', e2);
-          }
-        }
-        
-        if (!jsonData) {
-          // Method 3: Find any JSON-like object with agentName
-          const jsonMatch = responseStr.match(/\{[^{}]*"agentName"[^{}]*\}/);
-          if (jsonMatch) {
-            try {
-              jsonData = JSON.parse(jsonMatch[0]);
-            } catch (e3) {
-              console.error('Regex JSON parse failed:', e3);
-            }
-          }
-        }
-        
-        if (!jsonData) {
-          // Method 4: Look for any JSON object in the response
-          const anyJsonMatch = responseStr.match(/\{[\s\S]*?\}/);
-          if (anyJsonMatch) {
-            try {
-              jsonData = JSON.parse(anyJsonMatch[0]);
-              // Validate it has required fields
-              if (!jsonData.agentName) {
-                jsonData = null;
-              }
-            } catch (e4) {
-              console.error('Any JSON parse failed:', e4);
-            }
-          }
-        }
-        
-        if (!jsonData) {
-          console.error('All JSON parsing methods failed for response:', responseStr);
-        }
-      }
-
-      if (jsonData && jsonData.agentName && typeof jsonData.confidence === 'number') {
-        if (availableAgents.includes(jsonData.agentName)) {
-          console.log(`Routing agent predicted: ${jsonData.agentName} with confidence ${jsonData.confidence}`);
-          console.log(`Reasoning: ${jsonData.reasoning || 'Not provided'}`);
-          return {
-            agentName: jsonData.agentName,
-            confidence: jsonData.confidence
-          };
-        } else {
-          console.warn(`Routing agent predicted agent ${jsonData.agentName} not in available agents`);
-        }
-      } else {
-        console.error('Invalid prediction format:', jsonData);
+      if (prediction.agentName && availableAgents.includes(prediction.agentName)) {
+        console.log(`Routing agent predicted: ${prediction.agentName} with confidence ${prediction.confidence}`);
+        return {
+          agentName: prediction.agentName,
+          confidence: prediction.confidence
+        };
       }
     } catch (error) {
       console.error('Error in routing agent prediction:', error);
     }
 
-    // Fallback when routing agent prediction fails
-    console.log('Routing agent prediction failed, using intelligent fallback');
-    
-    // Check for document context in chat history
-    const hasDocsInFallback = this.hasDocumentContext(context);
-    
-    // Smart fallback based on input content
-    const inputLower = input.toLowerCase();
-    
-    // Enhanced time detection (including Spanish)
-    if (inputLower.includes('time') || inputLower.includes('hora') || inputLower.includes('día') || 
-        inputLower.includes('dia') || inputLower.includes('date') || inputLower.includes('fecha') ||
-        inputLower.includes('today') || inputLower.includes('hoy') || inputLower.includes('que dia') ||
-        inputLower.includes('qué día') || inputLower.includes('what day')) {
-      if (availableAgents.includes('time')) {
-        console.log('Fallback: Detected time query, routing to time agent');
-        return { agentName: 'time', confidence: 0.6 };
-      }
-      if (availableAgents.includes('current_time')) {
-        console.log('Fallback: Detected time query, routing to current_time agent (fallback)');
-        return { agentName: 'current_time', confidence: 0.6 };
-      }
-    }
-    
-    // Personal/conversational query detection (higher priority than document detection)
-    const personalQueries = ['llamo', 'nombre', 'name', 'soy', 'me llamo', 'my name', 'i am', 'hello', 'hola', 
-                           'hi', 'greeting', 'saludo', 'amor', 'love', 'relationship', 'relación', 'novios', 
-                           'boyfriend', 'girlfriend', 'tratame', 'treat me', 'llamame', 'call me'];
-    
-    const isPersonalQuery = personalQueries.some(term => inputLower.includes(term));
-    
-    if (isPersonalQuery && availableAgents.includes('general')) {
-      console.log('Fallback: Detected personal/conversational query, routing to general agent');
-      return { agentName: 'general', confidence: 0.8 };
-    }
-    
-    // Enhanced document detection (only explicit document references)
-    if ((inputLower.includes('document') && !inputLower.includes('documento')) || 
-        inputLower.includes('archivo') || inputLower.includes('documento') || 
-        inputLower.includes('de que trata') || inputLower.includes('uploaded') || 
-        inputLower.includes('what is this document') || inputLower.includes('que es este documento') ||
-        inputLower.includes('what does it say') || inputLower.includes('que dice el documento') ||
-        inputLower.includes('pdf') || inputLower.includes('file content') || inputLower.includes('contenido del archivo')) {
-      if (availableAgents.includes('document_search')) {
-        console.log('Fallback: Detected explicit document query, routing to document_search agent');
-        return { agentName: 'document_search', confidence: 0.6 };
-      }
-    }
-    
-    // Ambiguous query detection with document context
-    const ambiguousQueries = [
-      'this', 'esto', 'it', 'that', 'eso', 'what', 'que', 'how', 'como', 'why', 'porque',
-      'tell me', 'dime', 'explain', 'explica', 'show me', 'muestra', 'details', 'detalles'
-    ];
-    
-    const isAmbiguous = ambiguousQueries.some(term => 
-      inputLower.includes(term) && inputLower.split(' ').length <= 5
-    );
-    
-    if (isAmbiguous && hasDocsInFallback && availableAgents.includes('document_search')) {
-      console.log('Fallback: Detected ambiguous query with document context, routing to document_search agent');
-      return { agentName: 'document_search', confidence: 0.7 };
-    }
-    
-    if (inputLower.includes('weather') || inputLower.includes('clima') || inputLower.includes('temperature') || 
-        inputLower.includes('temperatura') || inputLower.includes('tiempo')) {
-      if (availableAgents.includes('open_weather_map')) {
-        console.log('Fallback: Detected weather query, routing to open_weather_map agent');
-        return { agentName: 'open_weather_map', confidence: 0.6 };
-      }
-      if (availableAgents.includes('weather')) {
-        console.log('Fallback: Detected weather query, routing to weather agent');
-        return { agentName: 'weather', confidence: 0.6 };
-      }
-    }
-    
-    // Default fallback - prefer document_search if documents are available
-    if (hasDocsInFallback && availableAgents.includes('document_search')) {
-      console.log('Fallback: Using document_search agent due to document context');
-      return { agentName: 'document_search', confidence: 0.5 };
-    }
-    
+    // Fallback if routing fails
     return {
-      agentName: availableAgents.includes('research') ? 'research' : 
-                availableAgents.includes('general') ? 'general' : availableAgents[0],
+      agentName: availableAgents.includes('research') ? 'research' : 'general',
       confidence: 0.5
     };
-  }
-
-  // Helper method to check if documents are available in chat context
-  private static hasDocumentContext(context: any): boolean {
-    return context.chatHistory && context.chatHistory.some((msg: any) => 
-      msg.content && (
-        msg.content.includes('[PDF Uploaded]') || 
-        msg.content.includes('[Document Uploaded]') ||
-        msg.content.includes('[File Uploaded]') ||
-        msg.content.includes('.pdf') ||
-        msg.content.includes('.docx') ||
-        msg.content.includes('.txt')
-      )
-    );
-  }
-
-  // Get a description of each agent for the LLM to understand its purpose
-  private static getAgentDescription(agentName: string): string {
-    const descriptions: Record<string, string> = {
-      'general': 'A general-purpose conversational agent that can handle a wide range of topics but has limited access to specific or real-time information.',
-      'web_search': 'Specializes in finding current information, news articles, and recent events by searching the web. NOTE: The research agent is preferred over this one.',
-      'research': 'Focuses on providing detailed factual information by searching the web and analyzing results. Handles company information, news, recent events, people, historical events, and other knowledge-based topics. This is the preferred agent for all factual queries.',
-      'time': 'PREFERRED: Intelligent time agent that provides current time, date, and timezone information with multilingual support and natural language understanding.',
-      'current_time': 'DEPRECATED: Simple timezone-based time tool. Use "time" agent instead.',
-      'weather': 'CRITICAL: Provides weather forecasts and current conditions for specific locations. Use this agent for ANY weather-related query including "clima", "weather", "temperature", "temperatura", "forecast", "pronóstico", etc.',
-      'open_weather_map': 'CRITICAL: Provides detailed weather information using OpenWeatherMap data. PREFERRED weather agent. Use this agent for ANY weather-related query including "clima", "weather", "temperature", "temperatura", "forecast", "pronóstico", etc.',
-      'document_search': 'CRITICAL: Searches through user-uploaded documents to find specific information. Use this agent for ANY query that asks about documents, uploaded files, or content within documents. This includes questions like "what is this document about?", "what details does it have?", "according to the document", etc. This agent has access to the user\'s uploaded documents.',
-      'summarizer': 'Summarizes long pieces of text or content.',
-      'code_interpreter': 'Analyzes, explains, and executes code snippets.',
-      'code_optimization': 'Optimizes and improves existing code.'
-    };
-
-    return descriptions[agentName] || `Agent that handles ${agentName}-related queries`;
   }
 
   // Confidence-based routing: use LLM to predict best agent, then run it and verify
