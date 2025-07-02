@@ -80,6 +80,7 @@ INSTRUCTIONS:
 1.  Analyze the user's query to understand the language used.
 2.  Present the weather data comparison in a user-friendly format.
 3.  Your entire response should be in the same language as the user's query. For example, if the user asked in Spanish, you must respond in Spanish.
+4.  Format the response using markdown for a clear and user-friendly presentation. Use headings, bold text, and lists.
 
 COMPARISON:`;
 
@@ -119,6 +120,7 @@ INSTRUCTIONS:
 1.  Analyze the user's query to understand the language used.
 2.  Present the weather data in a user-friendly format.
 3.  Your entire response should be in the same language as the user's query. For example, if the user asked in Spanish, you must respond in Spanish.
+4.  Format the response using markdown for a clear and user-friendly presentation. Use headings, bold text, and lists.
 
 RESPONSE:`;
 
@@ -135,6 +137,27 @@ RESPONSE:`;
       }
     } catch (error: any) {
       logger.error(`Error in weather agent: ${error.message}`, error.stack);
+      // Ensure even errors are summarized for consistent output
+      if (callAgent) {
+        const errorPrompt = `You are a helpful assistant. The user's request for weather information failed. Please inform them gracefully in the same language as their original query.
+
+USER'S QUERY: "${input}"
+ERROR: "I'm sorry, I couldn't get the weather information. Please try again with a specific location."
+
+INSTRUCTIONS:
+1.  Analyze the user's query to understand the language used.
+2.  Apologize for the error and explain that the weather information could not be retrieved.
+3.  Suggest trying again with a specific location.
+4.  Your entire response should be in the same language as the user's query.
+
+RESPONSE:`;
+        const finalResult = await callAgent('summarizer', errorPrompt, context);
+        return {
+          output: finalResult.output,
+          confidence: 0.2,
+        };
+      }
+      // Fallback if callAgent is not available
       return {
         output: `I'm sorry, I couldn't get the weather information. Please try again with a specific location.`,
         confidence: 0.2,

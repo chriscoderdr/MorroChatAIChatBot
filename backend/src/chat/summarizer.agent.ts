@@ -20,6 +20,7 @@ INSTRUCTIONS:
 3.  Maintain the appropriate language (e.g., Spanish, English) based on the text.
 4.  Focus on factual information and avoid speculation.
 5.  Do not include technical metadata or your own thinking process in the final output.
+6.  Format the final output using markdown for a beautiful and user-friendly experience. Use headings, bold text, lists, and tables where appropriate to present the information in a clear and organized way.
 
 Provide your analysis or summary:`;
 

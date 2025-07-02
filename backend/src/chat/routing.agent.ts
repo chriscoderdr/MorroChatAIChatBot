@@ -28,7 +28,7 @@ const hasDocumentContext = (context: AgentContext): boolean => {
 };
 
 // Get a description of each agent for the LLM to understand its purpose
-const getAgentDescription = (agentName: string): string => {
+const getAgentDescription = (agentName: string): string | undefined => {
   const descriptions: Record<string, string> = {
     general:
       'A general-purpose conversational agent for a wide range of topics, including answering questions about itself.',
@@ -42,9 +42,7 @@ const getAgentDescription = (agentName: string): string => {
     code_interpreter: 'Analyzes, explains, and executes code snippets.',
     code_optimization: 'Optimizes and improves existing code.',
   };
-  return (
-    descriptions[agentName] || `Agent that handles ${agentName}-related queries`
-  );
+  return descriptions[agentName];
 };
 
 /**
@@ -70,10 +68,19 @@ AgentRegistry.register({
 
       const hasDocuments = hasDocumentContext(context);
 
+      const routableAgents = availableAgents
+        .map((agent) => ({
+          name: agent,
+          description: getAgentDescription(agent),
+        }))
+        .filter((agent) => agent.description);
+
       const systemPrompt = `CRITICAL: You are a JSON-only routing API. You MUST return ONLY a JSON object. NO conversational text.
 
 AVAILABLE AGENTS:
-${availableAgents.map((agent) => `- ${agent}: ${getAgentDescription(agent)}`).join('\n')}
+${routableAgents
+  .map((agent) => `- ${agent.name}: ${agent.description}`)
+  .join('\n')}
 
 USER QUERY: "${input}"
 ${
