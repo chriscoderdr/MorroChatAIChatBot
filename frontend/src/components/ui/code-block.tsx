@@ -78,22 +78,18 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ children, className, inlin
           <Button
             onClick={handleCopy}
             variant="secondary"
-            className="p-2 h-auto bg-transparent hover:bg-gray-700/80 text-gray-400 hover:text-white border-none transition-all duration-200 relative"
+            className="p-2 h-auto bg-transparent hover:bg-gray-700/80 text-gray-400 hover:text-white border-none transition-all duration-200 flex items-center gap-2"
             aria-label="Copy code"
           >
             {copied ? (
               <>
                 <Check className="h-4 w-4 text-green-400" />
-                <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                  Copied!
-                </span>
+                <span className="text-xs text-green-400">Copied!</span>
               </>
             ) : (
               <>
                 <Copy className="h-4 w-4" />
-                <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                  Copy code
-                </span>
+                <span className="text-xs">Copy code</span>
               </>
             )}
           </Button>
