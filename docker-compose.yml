@@ -24,6 +24,13 @@ services:
     networks:
       - morrochat-network
 
+  tor:
+    image: dperson/torproxy
+    container_name: morrochat-tor
+    restart: unless-stopped
+    networks:
+      - morrochat-network
+
   chromadb:
     image: chromadb/chroma:latest
     container_name: morrochat-chromadb
@@ -72,8 +79,11 @@ services:
       - SEARXNG_BASEURL=http://localhost:8888/
       - INSTANCE_NAME="morrochat-searxng"
       - SEARXNG_REDIS_URL=redis://redis:6379/0
+      - http_proxy=http://tor:8118
+      - https_proxy=http://tor:8118
     depends_on:
       - redis
+      - tor
     networks:
       - morrochat-network
 

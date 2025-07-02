@@ -6,6 +6,7 @@ server:
   limiter: false
 
 search:
+  request_timeout: 10
   formats:
     - html
     - json
@@ -26,19 +27,45 @@ engines:
     shortcut: "mj"
     categories:
       - "general"
-    disabled: false
+    disabled: true
   - name: "presearch"
     engine: "presearch"
     shortcut: "ps"
     categories:
       - "general"
-    disabled: false
+    disabled: true
   - name: "startpage"
     engine: "startpage"
     shortcut: "sp"
     categories:
       - "general"
     disabled: false
+  - name: "google"
+    engine: "google"
+    shortcut: "go"
+    categories:
+      - "general"
+    disabled: false
+    use_tor: false
+  - name: "bing"
+    engine: "bing"
+    shortcut: "bi"
+    categories:
+      - "general"
+    disabled: false
+    use_tor: false
+  - name: "qwant"
+    engine: "qwant"
+    shortcut: "qw"
+    categories:
+      - "general"
+    disabled: false
+  - name: "yahoo"
+    engine: "yahoo"
+    shortcut: "yh"
+    categories:
+      - "general"
+    disabled: true
 
 redis:
   url: redis://redis:6379/0
@@ -61,4 +88,4 @@ plugins:
   searx.plugins.oa_doi_rewrite.SXNGPlugin:
     active: true
   searx.plugins.tor_check.SXNGPlugin:
-    active: false
+    active: true
