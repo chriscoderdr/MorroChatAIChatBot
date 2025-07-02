@@ -50,172 +50,6 @@ export class LangChainService {
       func: async ({ query }) => { try { return await new TavilySearch().invoke({ query }); } catch (e) { this.logger.error(`Tavily search failed for query: ${query}`, e.stack); return "Search failed."; } },
     });
 
-    const chromaTool = new DynamicStructuredTool({
-      name: "document_search_tool",
-      description: "Searches through uploaded documents to find relevant content. This tool retrieves raw document content that should be analyzed and interpreted by the LLM.",
-      schema: z.object({ question: z.string().describe("A question about the user's uploaded document, PDF, or file.") }),
-      func: async ({ question }, config) => {
-        const extractQuestionKeywords = (question: string): string[] => {
-          const questionLower = question.toLowerCase();
-          const keywords: string[] = [];
-          const articleRefs = questionLower.match(/artículo\s+\d+|article\s+\d+/g);
-          if (articleRefs) {
-            keywords.push(...articleRefs);
-          }
-          const importantWords = questionLower
-            .replace(/[^\w\s]/g, ' ')
-            .split(/\s+/)
-            .filter(word => 
-              word.length > 3 && 
-              !['what', 'como', 'donde', 'cuando', 'porque', 'cual', 'quien', 'dice', 'trata', 'contiene', 'sobre', 'acerca'].includes(word)
-            );
-          keywords.push(...importantWords);
-          if (questionLower.includes('constitución') || questionLower.includes('constitution')) {
-            keywords.push('constitución', 'constitution');
-          }
-          return [...new Set(keywords)];
-        };
-
-        const getContentTypeBoost = (contentType: string, question: string): number => {
-          const questionLower = question.toLowerCase();
-          if ((questionLower.includes('artículo') || questionLower.includes('article')) && contentType === 'article') {
-            return 0.2;
-          }
-          if ((questionLower.includes('definición') || questionLower.includes('definition') || questionLower.includes('qué es')) && contentType === 'definition') {
-            return 0.15;
-          }
-          if ((questionLower.includes('procedimiento') || questionLower.includes('cómo') || questionLower.includes('proceso')) && contentType === 'procedure') {
-            return 0.15;
-          }
-          if ((questionLower.includes('trata') || questionLower.includes('sobre') || questionLower.includes('resumen')) && contentType === 'header') {
-            return 0.1;
-          }
-          return 0;
-        };
-
-        const getStructureBoost = (metadata: any, docLower: string): number => {
-          let boost = 0;
-          if (metadata.startsWithHeader) {
-            boost += 0.1;
-          }
-          if (metadata.hasArticleReference) {
-            boost += 0.1;
-          }
-          if (metadata.hasNumbers) {
-            boost += 0.05;
-          }
-          return boost;
-        };
-
-        const getLengthBoost = (length: number): number => {
-          if (length >= 800 && length <= 2000) {
-            return 0.1;
-          }
-          if (length >= 500 && length < 800) {
-            return 0.05;
-          }
-          if (length < 200) {
-            return -0.1;
-          }
-          return 0;
-        };
-
-        let sessionId = (config as any)?.metadata?.sessionId || (config as any)?.configurable?.sessionId || (config as any)?.userId;
-        if (!sessionId) return "No session ID provided.";
-        
-        let queryEmbedding;
-        try {
-          const { GoogleGenerativeAIEmbeddings } = await import('@langchain/google-genai');
-          const embedder = new GoogleGenerativeAIEmbeddings({ apiKey: process.env.GEMINI_API_KEY });
-          [queryEmbedding] = await embedder.embedDocuments([question]);
-        } catch (error) {
-          console.warn('Failed to embed query, using fallback search:', error.message);
-          queryEmbedding = null;
-        }
-        
-        const keywords = question.toLowerCase().replace(/[^\w\s]/g, ' ').split(/\s+/).filter(word => word.length > 2 && !['que', 'qué', 'del', 'los', 'las', 'una', 'and', 'the', 'for', 'with'].includes(word));
-        const chromaUrl = process.env.CHROMA_URL || "";
-        const logger = this.logger || console;
-        let host = '';
-        let port = 8000;
-        let ssl = false;
-        try {
-          const url = new URL(chromaUrl);
-          host = url.hostname;
-          port = Number(url.port) || 8000;
-          ssl = false;
-        } catch (err) {
-          logger.error?.(`Failed to parse CHROMA_URL: ${chromaUrl}`, err);
-        }
-        const chroma = new ChromaClient({ host, port, ssl });
-        const collectionName = `user_${sessionId}`;
-        let collection;
-        
-        try {
-          collection = await chroma.getOrCreateCollection({ name: collectionName, embeddingFunction: undefined });
-        } catch (error) {
-          console.warn('Failed to create ChromaDB collection, using fallback:', error.message);
-          return "No documents found (ChromaDB not available in test environment).";
-        }
-        
-        const questionKeywords = extractQuestionKeywords(question);
-        const semanticNResults = 20;
-        let semanticResults;
-        
-        if (queryEmbedding) {
-          semanticResults = await collection.query({ queryEmbeddings: [queryEmbedding], nResults: semanticNResults, include: ["metadatas", "documents", "distances"] });
-        } else {
-          const keywordQuery = questionKeywords.join(' ');
-          semanticResults = await collection.query({ queryTexts: [keywordQuery], nResults: semanticNResults, include: ["metadatas", "documents", "distances"] });
-        }
-        
-        let allDocs = semanticResults.documents?.[0] || [];
-        let allMetadatas = semanticResults.metadatas?.[0] || [];
-        let allDistances = semanticResults.distances?.[0] || [];
-
-        const hybridResults = allDocs.map((doc, i) => {
-          const metadata = allMetadatas[i] || {};
-          let score = allDistances[i] || 1.0;
-          const docLower = (doc || '').toLowerCase();
-          
-          const keywordMatches = questionKeywords.filter(keyword => docLower.includes(keyword.toLowerCase())).length;
-          if (keywordMatches > 0) {
-            score = score * (1 - (keywordMatches * 0.15));
-          }
-          
-          const contentTypeBoost = getContentTypeBoost(metadata.contentType as string || 'general', question);
-          score = score * (1 - contentTypeBoost);
-          
-          const keyTerms = typeof metadata.keyTerms === 'string' ? metadata.keyTerms.split(',').filter(term => term.trim()) : [];
-          const keyTermMatches = keyTerms.filter(term => questionKeywords.some(qk => qk.toLowerCase().includes(term.toLowerCase()) || term.toLowerCase().includes(qk.toLowerCase()))).length;
-          if (keyTermMatches > 0) {
-            score = score * (1 - (keyTermMatches * 0.1));
-          }
-          
-          const structureBoost = getStructureBoost(metadata, docLower);
-          score = score * (1 - structureBoost);
-          
-          const lengthBoost = getLengthBoost(doc?.length || 0);
-          score = score * (1 - lengthBoost);
-          
-          return { doc, metadata, distance: Math.max(0, score) };
-        });
-        
-        if (!hybridResults.length) return "No relevant information found in your uploaded document.";
-        
-        hybridResults.sort((a, b) => a.distance - b.distance);
-        const topResults = hybridResults.slice(0, 10);
-        
-        let context = topResults.map(result => (result.doc ?? '').trim()).join("\n\n");
-        
-        if (context.trim()) {
-          return context;
-        } else {
-          return "No relevant information found in your uploaded document.";
-        }
-      },
-    });
-
     const currentTimeTool = new DynamicStructuredTool({
       name: "current_time",
       description: "Gets the current date and time for a specific IANA timezone.",
@@ -331,13 +165,6 @@ Location(s):`;
         handle: async (input, context) => ({ output: await searchTool.func({ query: input }, context), confidence: 0.8 })
       });
     }
-    if (!AgentRegistry.getAgent('document_search_tool')) {
-      AgentRegistry.register({
-        name: 'document_search_tool',
-        description: chromaTool.description,
-        handle: async (input, context) => ({ output: await chromaTool.func({ question: input }, context), confidence: 0.8 })
-      });
-    }
     if (!AgentRegistry.getAgent('current_time')) {
       AgentRegistry.register({
         name: 'current_time',
@@ -366,6 +193,7 @@ Location(s):`;
           sessionId: sessionId,
           chatHistory: input.chat_history,
           llm,
+          geminiApiKey: this.configService.get<string>('GEMINI_API_KEY'),
           configurable: { ...(config?.configurable || {}), sessionId },
           metadata: { ...(config?.metadata || {}), sessionId },
           ...config

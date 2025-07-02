@@ -6,63 +6,27 @@ AgentRegistry.register({
   description: "Performs comprehensive web research using LLM intelligence to extract information and make follow-up searches when needed.",
   handle: async (input, context, callAgent) => {
     try {
-      // Check if this is a follow-up question and extract the entity from context
       let searchQuery = input;
       const isSpanish = /quién|quien|cuándo|cuando|qué|que|año|empresa|fundó|creó|dónde|donde|cómo|como|quiénes|quienes/.test(input.toLowerCase());
       
-      // Detect abstract/short questions that are likely follow-ups
-      const isLikelyFollowup = input.length < 30 && 
-                               (input.includes('?') || 
-                                input.match(/^(donde|dónde|cuando|cuándo|cómo|como|quién|quien|qué|que|cuánto|cuanto|cuál|cual)/i) ||
-                                input.match(/(ubicad[ao]|fundad[ao]|cread[ao])/i));
-      
-      // For follow-up questions, try to extract entity from previous context
-      if (isLikelyFollowup && context && context.chatHistory && Array.isArray(context.chatHistory)) {
-        // Look at more recent messages for better context
-        const recentMessages = context.chatHistory.slice(-8); 
-        
-        // Enhanced entity regex with more common entity types
-        const entitiesRegex = /\b(?:Banco\s+de\s+\w+|Soluciones\s+\w+|GBH|empresa\s+\w+|\w+\s+Bank|\w+\s+Company|Universidad\s+\w+|University\s+of\s+\w+|[A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b/gi;
-        
-        // Check if this is likely a follow-up (short question without specific entity)
-        if (!input.match(entitiesRegex)) {
-          // Extract entity names from recent messages (both user and system)
-          const entityMatches: string[] = [];
-          const companyMatches: string[] = [];
-          
-          for (const msg of recentMessages) {
-            const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-            
-            // Extract entities
-            const matches = content.match(entitiesRegex);
-            if (matches) entityMatches.push(...matches);
-            
-            // Specifically look for company names mentioned in responses
-            const companyMatch = content.match(/\b(?:Soluciones\s+GBH|GBH|empresa\s+GBH)\b/gi);
-            if (companyMatch) companyMatches.push(...companyMatch);
-            
-            // Look for location references that might provide context
-            if (input.toLowerCase().includes('servicio') || 
-                input.toLowerCase().includes('ofrece') ||
-                input.toLowerCase().includes('hace')) {
-              const dominicanMatch = content.match(/\b(?:Santo\s+Domingo|República\s+Dominicana|Dominicana)\b/gi);
-              if (dominicanMatch) companyMatches.push('Soluciones GBH Dominicana');
-            }
-          }
-          
-          // Prioritize company mentions first (more specific context)
-          if (companyMatches.length > 0) {
-            const mostRecentCompany = companyMatches[companyMatches.length - 1];
-            searchQuery = `${mostRecentCompany} ${input}`;
-            console.log(`Company follow-up detected. Enhanced query: ${searchQuery}`);
-          } 
-          // Fall back to general entities if no companies found
-          else if (entityMatches.length > 0) {
-            const mostRecentEntity = entityMatches[entityMatches.length - 1];
-            searchQuery = `${mostRecentEntity} ${input}`;
-            console.log(`Entity follow-up detected. Enhanced query: ${searchQuery}`);
-          }
-        }
+      // Always try to infer the subject and its context from the conversation history
+      const subjectResult = await callAgent("subject_inference", input, context);
+      let inferredSubject = '';
+      let inferredDescription = '';
+
+      try {
+        const subjectData = JSON.parse(subjectResult.output);
+        inferredSubject = subjectData.subject || '';
+        inferredDescription = subjectData.description || '';
+      } catch (e) {
+        console.warn("Could not parse subject inference JSON:", subjectResult.output);
+      }
+
+      if (inferredSubject) {
+        console.log(`Inferred subject: "${inferredSubject}", Description: "${inferredDescription}"`);
+        // Construct a more specific search query using the full context
+        searchQuery = `${inferredSubject} ${inferredDescription} ${input}`;
+        console.log(`Subject inference added context. New query: "${searchQuery}"`);
       }
       
       // Step 1: Initial web search
@@ -83,6 +47,7 @@ AgentRegistry.register({
 
       // Step 2: Use LLM intelligence to extract and analyze information
       const analysisPrompt = `You are an expert research analyst. Your task is to analyze search results and extract relevant information to answer the user's question. If the information is incomplete, determine if a follow-up search is needed.
+${inferredSubject ? `\nCRITICAL CONTEXT: The user is asking about "${inferredSubject} (${inferredDescription})". Prioritize information related to this specific entity.` : ''}
 
 USER'S QUESTION: ${input}
 
@@ -130,6 +95,7 @@ RESPONSE:`;
             if (additionalOutput && !additionalOutput.includes("Search failed") && additionalOutput.trim().length > 10) {
               // Combine both search results and re-analyze
               const combinedPrompt = `You are an expert research analyst. Analyze the combined search results to provide a comprehensive answer.
+${inferredSubject ? `\nCRITICAL CONTEXT: The user is asking about "${inferredSubject} (${inferredDescription})". Prioritize information related to this specific entity.` : ''}
 
 USER'S QUESTION: ${input}
 

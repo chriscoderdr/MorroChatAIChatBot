@@ -97,7 +97,15 @@ export class AgentOrchestrator {
 
     try {
       const result = await routingAgent.handle(input, { ...context, availableAgents }, AgentRegistry.callAgent);
-      const prediction = JSON.parse(result.output);
+      let jsonString = result.output.trim();
+
+      // Handle potential markdown code block
+      const codeBlockMatch = jsonString.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+      if (codeBlockMatch && codeBlockMatch[1]) {
+        jsonString = codeBlockMatch[1];
+      }
+
+      const prediction = JSON.parse(jsonString);
 
       if (prediction.error) {
         throw new Error(prediction.message);
