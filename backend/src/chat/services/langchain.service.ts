@@ -76,83 +76,23 @@ export class LangChainService {
 
     const openWeatherMapTool = new DynamicStructuredTool({
       name: "open_weather_map",
-      description: "Provides the current weather for a specific city.",
+      description: "Provides the current weather for a single, specific city.",
       schema: z.object({ location: z.string().describe("The city and country, e.g., 'Santo Domingo, DO'.") }),
       func: async ({ location }: { location: string }) => {
         if (!location || location.trim().length === 0) {
           return "Please provide a valid location to check the weather.";
         }
         
-        const extractLocationWithLLM = async (input: string): Promise<string> => {
-          const extractionPrompt = `You are a location extraction assistant. Your task is to extract city/location names from weather-related queries and format them properly for OpenWeatherMap API.
-
-RULES:
-1. If query compares multiple locations (words like "compara", "compare", "vs", "versus", "con el de"), return locations separated by " | "
-2. For single location, extract ONLY the city/location name from the query
-3. Format as "City, Country" when possible (e.g., "Santo Domingo, DO", "New York, US")
-4. Use standard country codes (US, DO, ES, FR, JP, PH, etc.)
-5. If no country is specified, return just the city name
-6. Remove ALL question words, weather terms, and extra text
-7. Return ONLY the location(s), nothing else
-
-Query: "${input}"
-Location(s):`;
-
-          try {
-            const extractionResult = await llm.invoke(extractionPrompt);
-            return typeof extractionResult.content === 'string' ? extractionResult.content.trim() : extractionResult.content.toString().trim();
-          } catch (error) {
-            this.logger.error(`Error using LLM for location extraction: ${error.message}`);
-            return input.replace(/^(como\s+esta\s+el\s+clima\s+en\s+|what(?:'s|\s+is)\s+the\s+weather\s+(?:like\s+)?(?:in\s+|at\s+|for\s+)|weather\s+(?:in\s+|at\s+|for\s+)|clima\s+en\s+|tiempo\s+en\s+)/i, '').replace(/\?/g, '').trim();
-          }
-        };
-        
-        const cleanLocation = await extractLocationWithLLM(location);
-        
-        if (cleanLocation.includes(' | ')) {
-          const locations = cleanLocation.split(' | ').map(loc => loc.trim());
-          const apiKey = this.configService.get<string>('OPENWEATHER_API_KEY');
-          if (!apiKey) return "OpenWeatherMap API key is missing.";
-          
-          const fetchSingleLocationWeather = async (singleLocation: string): Promise<string> => {
-            try {
-              const geoUrl = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(singleLocation)}&limit=1&appid=${apiKey}`;
-              const geoRes = await fetch(geoUrl);
-              if (!geoRes.ok) throw new Error(`Geocoding API error: HTTP ${geoRes.status}`);
-              const geoData = await geoRes.json();
-              if (!geoData || geoData.length === 0) throw new Error(`Could not find location data for ${singleLocation}`);
-              
-              const { lat, lon, name, country } = geoData[0];
-              const weatherUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${apiKey}&lang=es`;
-              const weatherRes = await fetch(weatherUrl);
-              if (!weatherRes.ok) throw new Error(`Weather API error: HTTP ${weatherRes.status}`);
-              
-              const weatherData = await weatherRes.json();
-              const { temp, feels_like, humidity } = weatherData.main;
-              const description = weatherData.weather[0].description;
-              const windSpeed = weatherData.wind?.speed || 'N/A';
-              
-              return `${name}, ${country}: ${description}. Temp: ${temp}°C (feels like ${feels_like}°C). Humidity: ${humidity}%. Wind: ${windSpeed} m/s.`;
-            } catch (error) {
-              return `Could not get weather for ${singleLocation}: ${error.message}`;
-            }
-          };
-          
-          const weatherResults = await Promise.all(locations.map(fetchSingleLocationWeather));
-          const isSpanish = location.toLowerCase().includes('compara') || location.toLowerCase().includes('clima');
-          return isSpanish ? `Comparación del clima:\n\n${weatherResults.join('\n\n')}` : `Weather comparison:\n\n${weatherResults.join('\n\n')}`;
-        }
-        
         const apiKey = this.configService.get<string>('OPENWEATHER_API_KEY');
         if (!apiKey) return "OpenWeatherMap API key is missing.";
         
         try {
-          const geoUrl = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(cleanLocation)}&limit=1&appid=${apiKey}`;
+          const geoUrl = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(location)}&limit=1&appid=${apiKey}`;
           const geoRes = await fetch(geoUrl);
-          if (!geoRes.ok) return `Could not find location data for ${cleanLocation}. API returned error ${geoRes.status}.`;
+          if (!geoRes.ok) return `Could not find location data for ${location}. API returned error ${geoRes.status}.`;
           
           const geoData = await geoRes.json();
-          if (!geoData || geoData.length === 0) return `Could not find location data for ${cleanLocation}. Please try with a more specific location.`;
+          if (!geoData || geoData.length === 0) return `Could not find location data for ${location}. Please try with a more specific location.`;
           
           const { lat, lon, name, country } = geoData[0];
           const weatherUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${apiKey}&lang=es`;
@@ -166,7 +106,7 @@ Location(s):`;
           
           return `Current weather in ${name}, ${country}: ${description}. Temp: ${temp}°C (feels like ${feels_like}°C). Humidity: ${humidity}%. Wind speed: ${windSpeed} m/s.`;
         } catch (error) { 
-          return `An error occurred while fetching weather for ${cleanLocation}. Please try again with a more specific location.`; 
+          return `An error occurred while fetching weather for ${location}. Please try again with a more specific location.`; 
         }
       },
     });

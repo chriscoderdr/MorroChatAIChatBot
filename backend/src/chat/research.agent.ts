@@ -7,7 +7,6 @@ AgentRegistry.register({
   handle: async (input, context, callAgent) => {
     try {
       let searchQuery = input;
-      const isSpanish = /quién|quien|cuándo|cuando|qué|que|año|empresa|fundó|creó|dónde|donde|cómo|como|quiénes|quienes/.test(input.toLowerCase());
       
       // Always try to infer the subject and its context from the conversation history
       const subjectResult = await callAgent("subject_inference", input, context);
@@ -38,9 +37,7 @@ AgentRegistry.register({
       
       if (!searchOutput || searchOutput.includes("Search failed") || searchOutput.trim().length < 10) {
         return {
-          output: isSpanish 
-            ? "No pude encontrar información confiable sobre tu pregunta. Por favor intenta reformular o ser más específico."
-            : "I couldn't find reliable information about your question. Please try rephrasing or being more specific.",
+          output: "I couldn't find reliable information about your question. Please try rephrasing or being more specific.",
           confidence: 0.2
         };
       }
@@ -163,11 +160,8 @@ RESPONSE:`;
       };
       
     } catch (error) {
-      const isSpanish = /quién|quien|cuándo|cuando|qué|que|año|empresa|fundó|creó/.test(input.toLowerCase());
       return {
-        output: isSpanish 
-          ? `Lo siento, no pude completar la búsqueda: ${error.message}. Por favor intenta de nuevo con una pregunta diferente.`
-          : `Sorry, I couldn't complete the search: ${error.message}. Please try again with a different question.`,
+        output: `Sorry, I couldn't complete the search: ${error.message}. Please try again with a different question.`,
         confidence: 0.1
       };
     }

@@ -4,220 +4,77 @@ import { Logger } from "@nestjs/common";
 // Create a dedicated weather agent that uses the open_weather_map tool correctly
 AgentRegistry.register({
   name: 'weather',
-  description: 'Get current weather information for a specific location',
+  description: 'Get current weather information for a specific location or compare weather between multiple locations.',
   handle: async (input, context, callAgent) => {
     const logger = new Logger('WeatherAgent');
     logger.log(`Processing weather request: "${input}"`);
     
     try {
-      // Enhanced location extraction
-      let location: string;
-      
-      // Check if the input explicitly mentions "in" or Spanish "en" followed by a location
-      if (input.toLowerCase().includes(' in ')) {
-        location = input.split(/\s+in\s+/i).pop()?.trim() || '';
-        // Clean up punctuation
-        location = location.replace(/[?!.,;:]$/, '');
-      }
-      // Check for Spanish "en" followed by a location (e.g., "clima en Santo Domingo")
-      else if (input.toLowerCase().includes(' en ')) {
-        location = input.split(/\s+en\s+/i).pop()?.trim() || '';
-        // Clean up punctuation
-        location = location.replace(/[?!.,;:]$/, '');
-        logger.log(`Found Spanish 'en' pattern, extracted location: "${location}"`);
-      }
-      // Check for "for" or Spanish "para" followed by a location
-      else if (input.toLowerCase().includes(' for ') || input.toLowerCase().includes(' para ')) {
-        const preposition = input.toLowerCase().includes(' for ') ? ' for ' : ' para ';
-        location = input.split(new RegExp(`\\s+${preposition}\\s+`, 'i')).pop()?.trim() || '';
-        // Clean up punctuation
-        location = location.replace(/[?!.,;:]$/, '');
-      }
-      // Strip weather-related terms to extract just the location
-      else {
-        location = input.replace(/weather|clima|temperature|temperatura|forecast|pronóstico|what's|how's|how is|what is|whats|hows|el clima en|el tiempo en|que|hace/gi, '').trim();
-        
-        // Look for common city names in the input even if they're part of larger phrases
-        const commonCities = [
-          { search: /\bnew\s*york\b/i, replace: "New York, USA" },
-          { search: /\bnueva\s*york\b/i, replace: "New York, USA" },
-          { search: /\bsanto\s*domingo\b/i, replace: "Santo Domingo, Dominican Republic" },
-          { search: /\bmadrid\b/i, replace: "Madrid, Spain" },
-          { search: /\blondon\b/i, replace: "London, GB" },
-          { search: /\blondres\b/i, replace: "London, GB" },
-          { search: /\btokyo\b/i, replace: "Tokyo, Japan" },
-          { search: /\btokio\b/i, replace: "Tokyo, Japan" },
-          { search: /\bparis\b/i, replace: "Paris, France" },
-          { search: /\brome\b/i, replace: "Rome, Italy" },
-          { search: /\broma\b/i, replace: "Rome, Italy" }
-        ];
-        
-        // Check if any common city is mentioned in the input
-        for (const city of commonCities) {
-          if (city.search.test(input)) {
-            location = city.replace;
-            logger.log(`Detected common city name in input, using: ${location}`);
-            break;
-          }
-        }
-      }
-      
-      logger.log(`Extracted location: "${location}"`);
-      
-      // Map common country and city names to better search terms
-      const locationMap: Record<string, string> = {
-        // Countries & Regions
-        'dominicana': 'Santo Domingo, Dominican Republic',
-        'república dominicana': 'Santo Domingo, Dominican Republic',
-        'republica dominicana': 'Santo Domingo, Dominican Republic',
-        'rd': 'Santo Domingo, Dominican Republic',
-        'usa': 'New York, USA',
-        'eeuu': 'New York, USA',
-        'estados unidos': 'New York, USA',
-        'españa': 'Madrid, Spain',
-        'espana': 'Madrid, Spain',
-        'uk': 'London, GB',
-        'reino unido': 'London, GB',
-        
-        // Major cities that might be ambiguous or need country specification
-        'new york': 'New York, USA',
-        'nueva york': 'New York, USA',
-        'tokyo': 'Tokyo, Japan',
-        'tokio': 'Tokyo, Japan',
-        'paris': 'Paris, France',
-        'london': 'London, GB',
-        'londres': 'London, GB',
-        'rome': 'Rome, Italy',
-        'roma': 'Rome, Italy',
-        'santo domingo': 'Santo Domingo, Dominican Republic',
-        'santiago': 'Santiago, Dominican Republic',
-        'santiago de los caballeros': 'Santiago, Dominican Republic',
-        'boston': 'Boston, USA',
-        'chicago': 'Chicago, USA',
-        'miami': 'Miami, USA',
-        'los angeles': 'Los Angeles, USA',
-        'san francisco': 'San Francisco, USA',
-      };
-      
-      // Check if we have a mapping for this location
-      const normalizedLocation = location.toLowerCase().trim();
-      
-      // Special case: Handle "New York" query explicitly (common issue)
-      if (normalizedLocation === "new york" || input.toLowerCase().includes("new york")) {
-        logger.log("Explicitly handling New York query");
-        location = "New York, USA";
-      }
-      // Check our location map for other mapped locations
-      else if (locationMap[normalizedLocation]) {
-        logger.log(`Mapped "${location}" to "${locationMap[normalizedLocation]}"`);
-        location = locationMap[normalizedLocation];
-      }
-      
-      // If location is too short or empty, use a default location or error message
-      if (!location || location.length < 2) {
-        logger.warn(`Invalid location extracted: "${location}"`);
+      const { llm } = context;
+
+      if (!llm) {
+        logger.warn('LLM not available for location extraction in WeatherAgent.');
         return {
-          output: "I need a specific location to check the weather. For example, try 'What's the weather in New York?' or 'Weather in Tokyo'.",
-          confidence: 0.5
+          output: "I'm sorry, I can't process this request without my core AI module.",
+          confidence: 0.1,
         };
       }
-      
-      // Ensure we pass a consistent session ID in all parts of the context
-      const sessionId = context.userId || context?.configurable?.sessionId || context?.metadata?.sessionId;
-      const weatherContext = { 
-        ...context,
-        userId: sessionId,
-        sessionId: sessionId,
-        configurable: {
-          ...(context?.configurable || {}),
-          sessionId: sessionId
-        },
-        metadata: {
-          ...(context?.metadata || {}),
-          sessionId: sessionId
-        }
-      };
-      
-      // Log the context we're using for debugging
-      logger.log(`Weather agent using session ID: ${sessionId}`);
-      logger.log(`Weather context has chat history: ${!!context.chatHistory}`);
-      if (context.chatHistory) {
-        logger.log(`Chat history length: ${context.chatHistory.length} messages`);
+
+      const extractionPrompt = `You are a location extraction assistant. Your task is to extract city/location names from weather-related queries.
+
+RULES:
+1. If the query compares multiple locations (e.g., using "vs", "or", "and", "compara"), return the locations separated by " | ".
+2. For a single location, extract ONLY the city/location name.
+3. Format as "City, Country" when possible (e.g., "Santo Domingo, DO", "New York, US").
+4. Use standard country codes (US, DO, ES, FR, JP, PH, etc.).
+5. If no country is specified, return just the city name.
+6. Remove ALL question words, weather terms, and extra text.
+7. Return ONLY the location(s), nothing else.
+
+Query: "${input}"
+Location(s):`;
+
+      const extractionResult = await llm.invoke(extractionPrompt);
+      const locationsString = typeof extractionResult.content === 'string' ? extractionResult.content.trim() : extractionResult.content.toString().trim();
+
+      logger.log(`Extracted locations with LLM: "${locationsString}"`);
+
+      if (!locationsString) {
+        return {
+          output: "I couldn't identify a location in your request. Please specify a city, like 'weather in London'.",
+          confidence: 0.4
+        };
       }
-      
-      // Use the open_weather_map tool with the extracted location
-      try {
-        logger.log(`Calling open_weather_map agent for location: "${location}"`);
+
+      const locations = locationsString.split(' | ').map(loc => loc.trim());
+
+      if (locations.length > 1) {
+        // Handle multiple locations
+        const weatherResults = await Promise.all(
+          locations.map(location => callAgent('open_weather_map', location, context))
+        );
         
-        // Explicitly verify callAgent is available and valid
-        if (!callAgent || typeof callAgent !== 'function') {
-          logger.error(`callAgent is not a valid function: ${typeof callAgent}`);
-          return {
-            output: `I'm sorry, I couldn't get the weather information due to a technical issue. Please try again later.`,
-            confidence: 0.5
-          };
-        }
-        
-        // Call the agent with proper error handling
-        const result = await callAgent('open_weather_map', location, weatherContext);
-        
-        if (!result) {
-          logger.error(`open_weather_map agent returned undefined result`);
-          return {
-            output: `I'm sorry, I couldn't get the weather information. Please try again later.`,
-            confidence: 0.5
-          };
-        }
-        
-        logger.log(`Weather result for location "${location}": ${result.output?.substring(0, 100)}...`);
-        
-        // Calculate confidence based on the result
-        let confidence = 0.9; // High default confidence
-        
-        // Check for common error responses
-        if (result.output.includes("Could not find location data") || 
-            result.output.includes("Failed to fetch weather") ||
-            result.output.includes("An error occurred") ||
-            result.output.includes("API key is missing")) {
-          confidence = 0.5; // Lower confidence for errors
-          logger.warn(`Weather agent detected error in response: "${result.output.substring(0, 100)}..."`);
-        }
-        
-        // Check if we successfully got the temperature
-        if (result.output.includes("°C") && result.output.includes("Current weather in")) {
-          confidence = 0.98; // Very high confidence when we have temperature data
-          logger.log(`Weather agent found temperature data, setting high confidence`);
-        }
-        
-        logger.log(`Weather agent returning with confidence: ${confidence}`);
-        
+        const combinedOutput = weatherResults.map(res => res.output).join('\n\n');
+        const isSpanish = input.toLowerCase().includes('compara') || input.toLowerCase().includes('clima');
+        const finalOutput = isSpanish ? `Comparación del clima:\n\n${combinedOutput}` : `Weather comparison:\n\n${combinedOutput}`;
+
+        return {
+          output: finalOutput,
+          confidence: 0.9
+        };
+      } else {
+        // Handle single location
+        const result = await callAgent('open_weather_map', locations[0], context);
         return {
           output: result.output,
-          confidence: confidence
+          confidence: result.confidence || 0.85
         };
-      } catch (callAgentError) {
-        logger.error(`Error calling open_weather_map agent: ${callAgentError.message}`, callAgentError.stack);
-        
-        // Fallback to direct API call if agent registry fails
-        try {
-          logger.log(`Attempting fallback direct weather API call for: ${location}`);
-          return {
-            output: `The current weather in ${location} could not be retrieved. Please try again with a more specific location.`,
-            confidence: 0.5
-          };
-        } catch (fallbackError) {
-          logger.error(`Fallback weather API call failed: ${fallbackError.message}`);
-          return {
-            output: `I'm sorry, I couldn't get the weather information. Please try again with a more specific location.`,
-            confidence: 0.5
-          };
-        }
       }
     } catch (error) {
       logger.error(`Error in weather agent: ${error.message}`, error.stack);
       return {
-        output: `I'm sorry, I couldn't get the weather information. Please try again with a specific location like "What's the weather in New York?"`,
-        confidence: 0.5
+        output: `I'm sorry, I couldn't get the weather information. Please try again with a specific location.`,
+        confidence: 0.2
       };
     }
   }
