@@ -28,6 +28,8 @@ A modern, production-ready AI chatbot platform inspired by the natural beauty of
 - When was soluciones gbh founded (you can replace with any company name)
 - Tell me the current time in Santo Domingo, Dominican Republic and compare it with the current time in Buenos Aires, Argentina
 
+- ```Explora las **últimas noticias y desarrollos económicos** en la República Dominicana durante los últimos 6 meses. Utiliza múltiples fuentes para identificar tendencias en **turismo sostenible**, **inversión extranjera directa** y **proyectos de infraestructura importantes**. Asegúrate de que los resultados incluyan al menos una **fuente gubernamental dominicana oficial**, un **análisis de un medio de comunicación internacional de buena reputación** y **datos estadísticos recientes (si están disponibles)**. Presenta los hallazgos más relevantes, destacando cualquier dato que muestre un impacto significativo en el desarrollo del país.```
+
 ### Test cuestions for document
 Upload document in sample-data/sample_data_account_details
 - what is this document about?

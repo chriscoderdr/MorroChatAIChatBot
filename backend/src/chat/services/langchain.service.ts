@@ -295,9 +295,13 @@ export class LangChainService {
           const answer = json.answers?.find(
             (a: any) => a.engine === 'plugin: calculator',
           );
-          return answer
-            ? `Result: ${answer.answer}`
-            : 'Could not calculate the expression.';
+          if (answer) {
+            const result = answer.answer.split('=');
+            return `### 🧮 Calculator Result\n**Expression:** \`${
+              result[0]
+            }\`\n**Result:** \`${result[1]}\``;
+          }
+          return 'Could not calculate the expression.';
         } catch (e) {
           this.logger.error(`Calculator tool failed for: "${expression}"`, e);
           return 'Failed to get calculation result.';
@@ -340,9 +344,10 @@ export class LangChainService {
           const answer = json.answers?.find(
             (a: any) => a.engine === 'plugin: unit_converter',
           );
-          return answer
-            ? `Conversion: ${answer.answer}`
-            : 'Could not perform the unit conversion.';
+          if (answer) {
+            return `### 📏 Unit Conversion\n**Query:** \`${query}\`\n**Result:** \`${answer.answer}\``;
+          }
+          return 'Could not perform the unit conversion.';
         } catch (e) {
           this.logger.error(`Unit converter tool failed for: "${query}"`, e);
           return 'Failed to get conversion result.';
@@ -386,9 +391,13 @@ export class LangChainService {
           const answer = json.answers?.find(
             (a: any) => a.engine === 'plugin: hash_plugin',
           );
-          return answer
-            ? `Hash Result: ${answer.answer}`
-            : `Could not compute ${algorithm} hash.`;
+          if (answer) {
+            const result = answer.answer.split('hash digest:');
+            return `### 🔒 Hashing Result\n**Text:** \`${text}\`\n**Algorithm:** \`${algorithm}\`\n**Hash:** \`${
+              result[1]
+            }\``;
+          }
+          return `Could not compute ${algorithm} hash.`;
         } catch (e) {
           this.logger.error(`Hashing tool failed for: "${query}"`, e);
           return 'Failed to get hash result.';
@@ -431,9 +440,10 @@ export class LangChainService {
           const answer = json.answers?.find(
             (a: any) => a.engine === 'currency',
           );
-          return answer
-            ? `Conversion: ${answer.answer}`
-            : 'Could not perform the currency conversion.';
+          if (answer) {
+            return `### 💰 Currency Conversion\n**Query:** \`${query}\`\n**Result:** \`${answer.answer}\``;
+          }
+          return 'Could not perform the currency conversion.';
         } catch (e) {
           this.logger.error(`Currency converter tool failed for: "${query}"`, e);
           return 'Failed to get currency conversion result.';

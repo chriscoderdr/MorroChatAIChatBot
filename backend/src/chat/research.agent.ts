@@ -150,7 +150,7 @@ ${historyText}
         *   "exclude_sites" (optional): An array of domains to exclude from the next search if you identify low-quality or irrelevant sources (e.g., ["example.com", "another-site.org"]).
     *   If "nextAction" is "FINISH", the JSON should contain:
         *   "nextAction": "FINISH"
-        *   "nextQueryOrFinalAnswer": The complete, final, conversational answer. If any direct, factual answers (like unit conversions or specific numbers) were found, state them clearly. At the end, include a "## Sources" section with a markdown-formatted list of the most relevant URLs.
+        *   "nextQueryOrFinalAnswer": A complete, final, and engaging answer for the user. Use markdown to format the answer with emojis, blockquotes, and bold text to make it more visually appealing. If any direct, factual answers were found, highlight them. At the end, include a "## 📚 Sources" section with a markdown-formatted list of the most relevant URLs.
 6.  Provide all answers in the same language as the user's original question.
 
 **JSON Response (JSON only, no other text):**`;
@@ -219,10 +219,10 @@ ${historyText}
 
 **Instructions:**
 1.  Review the entire research history to synthesize the most relevant information.
-2.  Formulate a single, clear, conversational answer for the user.
-3.  If any direct, factual answers (like unit conversions, specific numbers, or hash values) were found, state them clearly in your summary.
-4.  Acknowledge that a complete answer could not be found, but present the information you did find in a helpful way.
-5.  At the end of your answer, include a "## Sources" section with a markdown-formatted list of the most relevant URLs discovered.
+2.  Formulate a single, clear, and engaging answer for the user. Use markdown to format the answer with emojis, blockquotes, and bold text to make it more visually appealing.
+3.  If any direct, factual answers (like unit conversions, specific numbers, or hash values) were found, highlight them in your summary.
+4.  Acknowledge that a complete answer could not be found, but present the information you did find in a helpful and visually appealing way.
+5.  At the end of your answer, include a "## 📚 Sources" section with a markdown-formatted list of the most relevant URLs discovered.
 6.  Do not include raw search results or JSON in your response.
 7.  Provide the answer in the same language as the user's original question.
 
