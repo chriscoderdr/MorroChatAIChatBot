@@ -7,7 +7,7 @@ export class ChromaService {
   private readonly chroma: ChromaClient;
 
   constructor() {
-    const chromaUrl = process.env.CHROMA_URL || "";
+    const chromaUrl = process.env.CHROMA_URL || '';
     let host = '';
     let port = 8000;
     let ssl = false;

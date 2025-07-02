@@ -3,7 +3,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { ChatSession, StoredMongoMessage } from '../schemas/chat-session.schema';
+import {
+  ChatSession,
+  StoredMongoMessage,
+} from '../schemas/chat-session.schema';
 import { SessionCacheService } from '../services/session-cache.service';
 
 @Injectable()
@@ -30,7 +33,7 @@ export class ChatSessionRepository {
     this.sessionCacheService.setSession(userId, savedSession);
     return savedSession;
   }
-  
+
   // NOTE: The addMessage and other background update methods in this repository
   // are now BYPASSED by the new MongoDBChatMessageHistory logic.
   // They can be kept for other potential uses or cleaned up later.

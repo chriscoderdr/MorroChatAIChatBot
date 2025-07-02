@@ -1,57 +1,61 @@
-// agent-registry.ts
-// A simple pluggable agent registry for dynamic agent/skill registration
-
-export interface AgentResult {
-  output: string;
-  confidence?: number; // 0.0 - 1.0
-}
-
-export interface AgentHandler {
-  name: string;
-  description: string;
-  // handle can now receive a 'callAgent' function for chaining
-  handle: (input: string, context: any, callAgent: (name: string, input: string, context?: any) => Promise<AgentResult>) => Promise<AgentResult>;
-}
+import { AgentResult, Agent, AgentName, AgentContext } from './types';
 
 export class AgentRegistry {
-  private static agents: Map<string, AgentHandler> = new Map();
+  private static agents: Map<AgentName, Agent> = new Map();
 
-  static register(agent: AgentHandler) {
+  static register(agent: Agent) {
     this.agents.set(agent.name, agent);
   }
 
-  static getAgent(name: string): AgentHandler | undefined {
+  static getAgent(name: AgentName): Agent | undefined {
     return this.agents.get(name);
   }
 
-  static getAllAgents(): AgentHandler[] {
+  static getAllAgents(): Agent[] {
     return Array.from(this.agents.values());
   }
 
   // Utility for agent chaining: call another agent by name
-  static async callAgent(name: string, input: string, context: any = {}): Promise<AgentResult> {
+  static async callAgent(
+    name: AgentName,
+    input: string,
+    context: AgentContext,
+  ): Promise<AgentResult> {
     // Ensure "this" is properly bound by creating a bound version of callAgent
-    const boundCallAgent = AgentRegistry.callAgent.bind(AgentRegistry);
-    
+    const boundCallAgent = AgentRegistry.callAgent.bind(AgentRegistry) as (
+      name: AgentName,
+      input: string,
+      context: AgentContext,
+    ) => Promise<AgentResult>;
+
     // Log for debugging
-    console.log(`AgentRegistry.callAgent called for agent '${name}' with input: ${input.substring(0, 50)}...`);
-    
+    console.log(
+      `AgentRegistry.callAgent called for agent '${name}' with input: ${input.substring(
+        0,
+        50,
+      )}...`,
+    );
+
     const agent = AgentRegistry.getAgent(name);
     if (!agent) {
-      console.error(`Agent '${name}' not found in registry. Available agents: ${Array.from(AgentRegistry.agents.keys()).join(', ')}`);
+      console.error(
+        `Agent '${name}' not found in registry. Available agents: ${Array.from(
+          AgentRegistry.agents.keys(),
+        ).join(', ')}`,
+      );
       throw new Error(`Agent '${name}' not found`);
     }
-    
+
     // Enhance context with non-linguistic metadata about the request
-    const enhancedContext = {
+    const enhancedContext: AgentContext = {
       ...context,
       // Include basic metadata that doesn't assume any specific language
       inputLength: input.length,
       timestamp: new Date().toISOString(),
-      agentName: name
+      agentName: name,
     };
-    
+
     // Pass the explicitly bound callAgent for chaining
-    return agent.handle(input, enhancedContext, boundCallAgent);
+    return await agent.handle(input, enhancedContext, boundCallAgent);
   }
 }

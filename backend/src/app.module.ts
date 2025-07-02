@@ -13,29 +13,30 @@ import { ConfigService } from '@nestjs/config';
   imports: [
     AppConfigModule,
     ThrottlerModule.forRootAsync({
-      imports: [AppConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const ttl = configService.get<number>('throttle.ttl');
         const limit = configService.get<number>('throttle.limit');
         const safeTtl = typeof ttl === 'number' && !isNaN(ttl) ? ttl : 30;
-        const safeLimit = typeof limit === 'number' && !isNaN(limit) ? limit : 100;
+        const safeLimit =
+          typeof limit === 'number' && !isNaN(limit) ? limit : 100;
         return {
           throttlers: [
             {
               ttl: seconds(safeTtl),
               limit: safeLimit,
-            }
-          ]
+            },
+          ],
         };
       },
     }),
     MongooseModule.forRootAsync({
-      imports: [AppConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         uri: configService.get<string>('database.mongoUri'),
-        connectionFactory: (connection) => {
+        connectionFactory: (connection: {
+          on: (arg0: string, arg1: () => void) => void;
+        }) => {
           connection.on('connected', () => {
             console.log('MongoDB connection established successfully');
           });
@@ -44,11 +45,13 @@ import { ConfigService } from '@nestjs/config';
         maxPoolSize: configService.get<number>('database.maxPoolSize'),
         minPoolSize: configService.get<number>('database.minPoolSize'),
         socketTimeoutMS: configService.get<number>('database.socketTimeoutMS'),
-        connectTimeoutMS: configService.get<number>('database.connectTimeoutMS'),
+        connectTimeoutMS: configService.get<number>(
+          'database.connectTimeoutMS',
+        ),
         bufferCommands: configService.get<boolean>('database.bufferCommands'),
       }),
     }),
-    ChatModule
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [
@@ -56,13 +59,11 @@ import { ConfigService } from '@nestjs/config';
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
-    AppService
+    AppService,
   ],
 })
-export class AppModule implements NestModule { 
+export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer
-      .apply(BrowserSessionMiddleware)
-      .forRoutes('*'); // Apply to all routes
+    consumer.apply(BrowserSessionMiddleware).forRoutes('*'); // Apply to all routes
   }
 }

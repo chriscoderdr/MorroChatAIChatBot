@@ -1,72 +1,73 @@
 // code-optimization.agent.ts
-import { AgentRegistry } from "./agent-registry";
+import { AgentRegistry } from './agent-registry';
 
 AgentRegistry.register({
-  name: "code_optimization",
-  description: "Specialized agent for analyzing and optimizing code performance, suggesting improvements and best practices.",
-  async handle(input, context, callAgent) {
+  name: 'code_optimization',
+  description:
+    'Specialized agent for analyzing and optimizing code performance, suggesting improvements and best practices.',
+  async handle(input) {
     try {
       // Extract code blocks from input
       const codeBlockRegex = /```(?:[\w]*\n)?([\s\S]*?)```/g;
       const codeBlocks: string[] = [];
       let match;
-      
+
       while ((match = codeBlockRegex.exec(input)) !== null) {
         codeBlocks.push(match[1].trim());
       }
-      
+
       if (codeBlocks.length === 0) {
         return {
-          output: "No code blocks found. Please provide code using triple backticks (```) format for optimization analysis.",
-          confidence: 0.2
+          output:
+            'No code blocks found. Please provide code using triple backticks (```) format for optimization analysis.',
+          confidence: 0.2,
         };
       }
-      
+
       // Analyze the code for optimization opportunities
       const code = codeBlocks[0]; // Focus on first code block
       const analysis = analyzeCodeForOptimization(code);
-      
+
       // Generate optimized version if possible
-      const optimizedCode = generateOptimizedCode(code, analysis);
-      
+      const optimizedCode = generateOptimizedCode(code);
+
       let output = `## Code Optimization Analysis\n\n`;
-      
+
       // Original code analysis
       output += `**Original Code Issues:**\n`;
-      analysis.issues.forEach(issue => {
+      analysis.issues.forEach((issue) => {
         output += `- ${issue}\n`;
       });
-      
+
       output += `\n**Performance Impact:** ${analysis.performanceImpact}\n\n`;
-      
+
       // Optimized version
       if (optimizedCode) {
         output += `**Optimized Version:**\n\`\`\`javascript\n${optimizedCode}\n\`\`\`\n\n`;
         output += `**Optimization Techniques Used:**\n`;
-        analysis.optimizations.forEach(opt => {
+        analysis.optimizations.forEach((opt) => {
           output += `- ${opt}\n`;
         });
         output += `\n**Expected Performance Improvement:** ${analysis.expectedImprovement}\n\n`;
       }
-      
+
       // Additional recommendations
       output += `**Additional Recommendations:**\n`;
-      analysis.recommendations.forEach(rec => {
+      analysis.recommendations.forEach((rec) => {
         output += `- ${rec}\n`;
       });
-      
+
       return {
         output: output,
-        confidence: 0.9
+        confidence: 0.9,
       };
-      
-    } catch (error) {
+    } catch (error: any) {
       return {
         output: `Code optimization analysis failed: ${error.message}`,
-        confidence: 0.1
+        confidence: 0.1,
       };
     }
-  }
+  },
 });
 
 // Helper functions for code analysis
@@ -76,40 +77,51 @@ function analyzeCodeForOptimization(code: string) {
     optimizations: [] as string[],
     recommendations: [] as string[],
     performanceImpact: '',
-    expectedImprovement: ''
+    expectedImprovement: '',
   };
-  
+
   // Detect nested loops
   const nestedLoopRegex = /for\s*\([^)]*\)\s*{[^}]*for\s*\([^)]*\)/gs;
   if (nestedLoopRegex.test(code)) {
-    analysis.issues.push("Nested loops detected - O(n²) or higher complexity");
-    analysis.optimizations.push("Loop optimization and algorithmic improvements");
-    analysis.performanceImpact = "High - Nested loops cause exponential performance degradation";
+    analysis.issues.push('Nested loops detected - O(n²) or higher complexity');
+    analysis.optimizations.push(
+      'Loop optimization and algorithmic improvements',
+    );
+    analysis.performanceImpact =
+      'High - Nested loops cause exponential performance degradation';
   }
-  
+
   // Detect expensive operations in loops
   if (code.includes('Math.sqrt') && code.includes('for')) {
-    analysis.issues.push("Expensive Math.sqrt operations inside loops");
-    analysis.optimizations.push("Pre-computation and caching of expensive calculations");
+    analysis.issues.push('Expensive Math.sqrt operations inside loops');
+    analysis.optimizations.push(
+      'Pre-computation and caching of expensive calculations',
+    );
   }
-  
+
   // Detect redundant calculations
   if (code.includes('i * j') && code.includes('for')) {
-    analysis.issues.push("Repeated calculations that could be optimized");
-    analysis.optimizations.push("Minimize redundant calculations per iteration");
+    analysis.issues.push('Repeated calculations that could be optimized');
+    analysis.optimizations.push(
+      'Minimize redundant calculations per iteration',
+    );
   }
-  
+
   // General recommendations
-  analysis.recommendations.push("Consider using more efficient algorithms");
-  analysis.recommendations.push("Profile the code with real data to measure improvements");
-  analysis.recommendations.push("Consider using Web Workers for CPU-intensive tasks");
-  
-  analysis.expectedImprovement = "50-90% performance improvement possible";
-  
+  analysis.recommendations.push('Consider using more efficient algorithms');
+  analysis.recommendations.push(
+    'Profile the code with real data to measure improvements',
+  );
+  analysis.recommendations.push(
+    'Consider using Web Workers for CPU-intensive tasks',
+  );
+
+  analysis.expectedImprovement = '50-90% performance improvement possible';
+
   return analysis;
 }
 
-function generateOptimizedCode(originalCode: string, analysis: any): string | null {
+function generateOptimizedCode(originalCode: string): string | null {
   // Specific optimization for the nested loop + Math.sqrt pattern
   if (originalCode.includes('Math.sqrt') && originalCode.includes('for')) {
     return `function optimized() {
@@ -159,6 +171,6 @@ function superOptimized() {
   return sumSqrtI * sumSqrtJ;
 }`;
   }
-  
+
   return null;
 }

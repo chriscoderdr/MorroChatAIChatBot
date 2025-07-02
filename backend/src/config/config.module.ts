@@ -1,8 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import appConfig from './app.config';
-import databaseConfig from './database.config';
-import aiConfig from './ai.config';
+import { AppConfig, DatabaseConfig, AiConfig, ThrottleConfig } from './index';
 
 @Module({
   imports: [
@@ -10,7 +8,7 @@ import aiConfig from './ai.config';
       isGlobal: true,
       cache: true,
       expandVariables: true,
-      load: [appConfig, databaseConfig, aiConfig],
+      load: [AppConfig, DatabaseConfig, AiConfig, ThrottleConfig],
       envFilePath: ['.env.local', '.env'],
     }),
   ],

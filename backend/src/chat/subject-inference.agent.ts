@@ -1,11 +1,13 @@
-import { AgentRegistry } from "./agent-registry";
-import { Logger } from "@nestjs/common";
-import { ChatOpenAI } from "@langchain/openai";
+import { AgentRegistry } from './agent-registry';
+import { Logger } from '@nestjs/common';
+import { ChatOpenAI } from '@langchain/openai';
+import { BaseMessage } from '@langchain/core/messages';
 
 AgentRegistry.register({
-  name: "subject_inference",
-  description: "Infers the main subject and its descriptive context from the recent conversation history.",
-  handle: async (input, context, callAgent) => {
+  name: 'subject_inference',
+  description:
+    'Infers the main subject and its descriptive context from the recent conversation history.',
+  handle: async (input, context) => {
     const logger = new Logger('SubjectInferenceAgent');
     try {
       const { chatHistory, llm } = context;
@@ -18,7 +20,17 @@ AgentRegistry.register({
         return { output: '{}' };
       }
 
-      const recentMessages = chatHistory.slice(-6).map((msg: any) => `${msg._getType()}: ${msg.content}`).join('\n');
+      const recentMessages = chatHistory
+        .slice(-6)
+
+        .map((msg: BaseMessage) => {
+          const content =
+            typeof msg.content === 'string'
+              ? msg.content
+              : JSON.stringify(msg.content);
+          return `${msg._getType()}: ${content}`;
+        })
+        .join('\n');
 
       const prompt = `You are a subject analysis expert. Your task is to analyze the provided conversation history and identify the primary subject and its essential descriptive context. The user's latest message is: "${input}".
 
@@ -49,28 +61,36 @@ ${recentMessages}
       let result;
       // Force JSON output if using OpenAI
       if (llm instanceof ChatOpenAI) {
-        const boundLLM = llm.bind({ response_format: { type: "json_object" } });
+        const boundLLM = llm.bind({ response_format: { type: 'json_object' } });
         result = await boundLLM.invoke(prompt);
       } else {
         result = await llm.invoke(prompt);
       }
-      
-      let jsonOutput = result.content.toString().trim();
-      
+
+      let jsonOutput =
+        typeof result.content === 'string'
+          ? result.content
+          : JSON.stringify(result.content);
+      jsonOutput = jsonOutput.trim();
+
       // Handle cases where the LLM might still wrap the output in markdown
-      const codeBlockMatch = jsonOutput.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+      const codeBlockMatch = jsonOutput.match(
+        /```(?:json)?\s*(\{[\s\S]*?\})\s*```/,
+      );
       if (codeBlockMatch && codeBlockMatch[1]) {
         jsonOutput = codeBlockMatch[1];
       }
 
       logger.log(`Inferred subject JSON: ${jsonOutput}`);
       return { output: jsonOutput, confidence: 0.95 };
-
-    } catch (error) {
-      logger.error(`Error in subject inference agent: ${error.message}`, error.stack);
+    } catch (error: any) {
+      logger.error(
+        `Error in subject inference agent: ${error.message}`,
+        error.stack,
+      );
       return { output: '{}' }; // Return empty JSON on error
     }
-  }
+  },
 });
 
 console.log('Subject Inference agent registered successfully');

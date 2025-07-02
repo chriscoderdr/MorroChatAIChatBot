@@ -1,21 +1,25 @@
-import { AgentRegistry } from "./agent-registry";
-import { Logger } from "@nestjs/common";
+import { AgentRegistry } from './agent-registry';
+import { Logger } from '@nestjs/common';
 
 // Create a dedicated weather agent that uses the open_weather_map tool correctly
 AgentRegistry.register({
   name: 'weather',
-  description: 'Get current weather information for a specific location or compare weather between multiple locations.',
+  description:
+    'Get current weather information for a specific location or compare weather between multiple locations.',
   handle: async (input, context, callAgent) => {
     const logger = new Logger('WeatherAgent');
     logger.log(`Processing weather request: "${input}"`);
-    
+
     try {
       const { llm } = context;
 
       if (!llm) {
-        logger.warn('LLM not available for location extraction in WeatherAgent.');
+        logger.warn(
+          'LLM not available for location extraction in WeatherAgent.',
+        );
         return {
-          output: "I'm sorry, I can't process this request without my core AI module.",
+          output:
+            "I'm sorry, I can't process this request without my core AI module.",
           confidence: 0.1,
         };
       }
@@ -35,27 +39,38 @@ Query: "${input}"
 Location(s):`;
 
       const extractionResult = await llm.invoke(extractionPrompt);
-      const locationsString = typeof extractionResult.content === 'string' ? extractionResult.content.trim() : extractionResult.content.toString().trim();
+      const locationsString =
+        typeof extractionResult.content === 'string'
+          ? extractionResult.content.trim()
+          : JSON.stringify(extractionResult.content).trim();
 
       logger.log(`Extracted locations with LLM: "${locationsString}"`);
 
       if (!locationsString) {
         return {
-          output: "I couldn't identify a location in your request. Please specify a city, like 'weather in London'.",
-          confidence: 0.4
+          output:
+            "I couldn't identify a location in your request. Please specify a city, like 'weather in London'.",
+          confidence: 0.4,
         };
       }
 
-      const locations = locationsString.split(' | ').map(loc => loc.trim());
+      const locations = locationsString.split(' | ').map((loc) => loc.trim());
 
       if (locations.length > 1) {
+        if (!callAgent) {
+          throw new Error('callAgent is not available');
+        }
         // Handle multiple locations
         const weatherResults = await Promise.all(
-          locations.map(location => callAgent('open_weather_map', location, context))
+          locations.map((location) =>
+            callAgent('open_weather_map', location, context),
+          ),
         );
-        
-        const combinedOutput = weatherResults.map(res => res.output).join('\n\n');
-        
+
+        const combinedOutput = weatherResults
+          .map((res) => res.output)
+          .join('\n\n');
+
         const comparisonPrompt = `You are a weather analyst. The user asked to compare the weather in multiple locations. Your task is to present the comparison in a clear, conversational way, using the same language as the user's original query.
 
 USER'S QUERY: "${input}"
@@ -71,29 +86,42 @@ INSTRUCTIONS:
 COMPARISON:`;
 
         // Use the summarizer agent to generate a language-aware response
-        const finalResult = await callAgent('summarizer', comparisonPrompt, context);
+        if (!callAgent) {
+          throw new Error('callAgent is not available');
+        }
+        const finalResult = await callAgent(
+          'summarizer',
+          comparisonPrompt,
+          context,
+        );
 
         return {
           output: finalResult.output,
-          confidence: 0.9
+          confidence: 0.9,
         };
-
       } else {
+        if (!callAgent) {
+          throw new Error('callAgent is not available');
+        }
         // Handle single location
-        const result = await callAgent('open_weather_map', locations[0], context);
+        const result = await callAgent(
+          'open_weather_map',
+          locations[0],
+          context,
+        );
         return {
           output: result.output,
-          confidence: result.confidence || 0.85
+          confidence: result.confidence || 0.85,
         };
       }
-    } catch (error) {
+    } catch (error: any) {
       logger.error(`Error in weather agent: ${error.message}`, error.stack);
       return {
         output: `I'm sorry, I couldn't get the weather information. Please try again with a specific location.`,
-        confidence: 0.2
+        confidence: 0.2,
       };
     }
-  }
+  },
 });
 
 console.log('Weather agent registered successfully');

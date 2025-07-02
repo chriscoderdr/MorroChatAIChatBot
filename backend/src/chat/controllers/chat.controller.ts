@@ -1,23 +1,22 @@
 // chat.controller.ts (Corrected)
 
-import { Body, Controller, Get, NotFoundException, Post, Req, Res, UseGuards } from '@nestjs/common';
-import { v4 as uuidv4 } from 'uuid';
+import { Body, Controller, Get, Post, Req, Res } from '@nestjs/common';
 import { ChatService } from '../services/chat.service';
 import { ChatRequestDto } from '../dto/chat-request.dto';
 import { ChatResponseDto } from '../dto/chat-response.dto';
 import { seconds, Throttle } from '@nestjs/throttler';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 
 @ApiTags('chat')
 @Controller('chat')
 export class ChatController {
-  constructor(private readonly chatService: ChatService) { }
+  constructor(private readonly chatService: ChatService) {}
 
   @ApiOperation({ summary: 'Clear the current chat session cookie' })
   @ApiResponse({ status: 200, description: 'Session cookie cleared' })
   @Post('new')
-  async createNewSession(
+  createNewSession(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
@@ -27,7 +26,7 @@ export class ChatController {
     return { success: true };
   }
 
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Process a chat request with intelligent agent routing',
     description: `
     This endpoint intelligently routes your message to the appropriate specialized agent:
@@ -46,22 +45,22 @@ export class ChatController {
     
     **General Chat:** Regular conversation
     Example: "Tell me about Dominican food"
-    `
+    `,
   })
   @ApiResponse({
     status: 201,
     description: 'Chat processed successfully',
-    type: ChatResponseDto
+    type: ChatResponseDto,
   })
   @ApiBody({
     type: ChatRequestDto,
-    description: 'Chat request with user message'
+    description: 'Chat request with user message',
   })
   @Throttle({
     default: {
       ttl: seconds(60),
-      limit: 20
-    }
+      limit: 20,
+    },
   })
   @Post()
   async chat(
@@ -72,7 +71,10 @@ export class ChatController {
     const browserSessionId = req.browserSessionId || 'anonymous';
 
     // We pass the userId (browserSessionId) directly to processChat.
-    const result = await this.chatService.processChat(message, browserSessionId);
+    const result = await this.chatService.processChat(
+      message,
+      browserSessionId,
+    );
 
     return {
       reply: result.reply,
@@ -80,12 +82,13 @@ export class ChatController {
   }
 
   @ApiOperation({ summary: 'Get chat history for the current session' })
-  @ApiResponse({ status: 200, description: 'Chat history retrieved successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Chat history retrieved successfully',
+  })
   @ApiResponse({ status: 404, description: 'No active chat session found' })
   @Get('history')
-  async getSessionHistory(
-    @Req() req: Request,
-  ) {
+  async getSessionHistory(@Req() req: Request) {
     const browserSessionId = req.browserSessionId;
 
     if (!browserSessionId) {

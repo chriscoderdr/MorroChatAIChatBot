@@ -1,21 +1,25 @@
 // research.agent.ts - A self-contained, intelligent research agent
-import { AgentRegistry } from "./agent-registry";
-import { Logger } from "@nestjs/common";
-import { ChatOpenAI } from "@langchain/openai";
+import { AgentRegistry } from './agent-registry';
+import { Logger } from '@nestjs/common';
+import { ChatOpenAI } from '@langchain/openai';
 
 const logger = new Logger('ResearchAgent');
 
 AgentRegistry.register({
-  name: "research",
-  description: "Performs multi-step, intelligent web research to answer complex questions.",
+  name: 'research',
+  description:
+    'Performs multi-step, intelligent web research to answer complex questions.',
   handle: async (input, context, callAgent) => {
     const MAX_ITERATIONS = 5;
-    let researchHistory: { query: string, results: string }[] = [];
+    const researchHistory: { query: string; results: string }[] = [];
     let currentQuery = input;
     let iteration = 0;
 
+    if (!callAgent) {
+      throw new Error('callAgent is not available');
+    }
     // First, get the subject context to focus the research
-    const subjectResult = await callAgent("subject_inference", input, context);
+    const subjectResult = await callAgent('subject_inference', input, context);
     let inferredSubject = '';
     try {
       const subjectData = JSON.parse(subjectResult.output);
@@ -26,20 +30,33 @@ AgentRegistry.register({
         logger.log(`Research context added. Initial query: "${currentQuery}"`);
       }
     } catch (e) {
-      logger.warn("Could not parse subject inference for research agent.");
+      logger.warn('Could not parse subject inference for research agent.');
     }
 
     while (iteration < MAX_ITERATIONS) {
       iteration++;
-      logger.log(`Research Iteration ${iteration}: Querying for "${currentQuery}"`);
+      logger.log(
+        `Research Iteration ${iteration}: Querying for "${currentQuery}"`,
+      );
 
       // Execute the web search
-      const searchResult = await callAgent("web_search", currentQuery, context);
-      const searchOutput = typeof searchResult.output === 'string' ? searchResult.output : JSON.stringify(searchResult.output || '');
+      if (!callAgent) {
+        throw new Error('callAgent is not available');
+      }
+      const searchResult = await callAgent('web_search', currentQuery, context);
+      const searchOutput =
+        typeof searchResult.output === 'string'
+          ? searchResult.output
+          : JSON.stringify(searchResult.output || '');
       researchHistory.push({ query: currentQuery, results: searchOutput });
 
       // Analyze the cumulative results and decide the next step
-      const historyText = researchHistory.map((item, index) => `Search #${index + 1} (Query: "${item.query}"):\n${item.results}`).join('\n\n---\n\n');
+      const historyText = researchHistory
+        .map(
+          (item, index) =>
+            `Search #${index + 1} (Query: "${item.query}"):\n${item.results}`,
+        )
+        .join('\n\n---\n\n');
 
       const analysisPrompt = `You are a master research analyst. Your task is to analyze the provided research history and decide on the next action.
 
@@ -66,40 +83,58 @@ ${historyText}
 
       const llm = context.llm as ChatOpenAI;
       if (!llm) {
-        return { output: "Research failed: LLM not available.", confidence: 0.1 };
+        return {
+          output: 'Research failed: LLM not available.',
+          confidence: 0.1,
+        };
       }
 
-      const boundLLM = llm.bind({ response_format: { type: "json_object" } });
+      const boundLLM = llm.bind({ response_format: { type: 'json_object' } });
       const analysisResult = await boundLLM.invoke(analysisPrompt);
-      
+
       try {
         let analysisJSON = analysisResult.content.toString().trim();
-        const codeBlockMatch = analysisJSON.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+        const codeBlockMatch = analysisJSON.match(
+          /```(?:json)?\s*(\{[\s\S]*?\})\s*```/,
+        );
         if (codeBlockMatch && codeBlockMatch[1]) {
           analysisJSON = codeBlockMatch[1];
         }
-        
+
         const analysis = JSON.parse(analysisJSON);
 
-        if (analysis.nextAction === "FINISH") {
-          logger.log("Research complete. Returning final answer.");
+        if (analysis.nextAction === 'FINISH') {
+          logger.log('Research complete. Returning final answer.');
           return { output: analysis.nextQueryOrFinalAnswer, confidence: 0.98 };
-        } else if (analysis.nextAction === "SEARCH") {
+        } else if (analysis.nextAction === 'SEARCH') {
           currentQuery = analysis.nextQueryOrFinalAnswer;
         } else {
-          throw new Error("Invalid nextAction from analysis.");
+          throw new Error('Invalid nextAction from analysis.');
         }
       } catch (e) {
-        logger.error(`Failed to parse research analysis JSON: ${e.message}`, analysisResult.content);
+        logger.error(
+          `Failed to parse research analysis JSON: ${e.message}`,
+          analysisResult.content,
+        );
         // If parsing fails, try to return the last known good information as a fallback.
         const lastGoodResult = researchHistory.slice(-1)[0]?.results;
-        return { output: `I encountered an issue with my research process, but here is the last information I found: ${lastGoodResult}`, confidence: 0.4 };
+        return {
+          output: `I encountered an issue with my research process, but here is the last information I found: ${lastGoodResult}`,
+          confidence: 0.4,
+        };
       }
     }
 
-    logger.warn("Research reached max iterations without a final answer. Synthesizing a summary of findings.");
+    logger.warn(
+      'Research reached max iterations without a final answer. Synthesizing a summary of findings.',
+    );
 
-    const historyText = researchHistory.map((item, index) => `Search #${index + 1} (Query: "${item.query}"):\n${item.results}`).join('\n\n---\n\n');
+    const historyText = researchHistory
+      .map(
+        (item, index) =>
+          `Search #${index + 1} (Query: "${item.query}"):\n${item.results}`,
+      )
+      .join('\n\n---\n\n');
 
     const finalSummaryPrompt = `You are a helpful research assistant. You were unable to find a definitive final answer after several search attempts. Your task is to synthesize the research history into a single, helpful, conversational response for the user.
 
@@ -128,7 +163,7 @@ ${historyText}
       const lastAnswer = researchHistory.slice(-1)[0]?.results;
       return {
         output: `I performed several searches but could not arrive at a definitive answer. Here is the most relevant information I found: ${lastAnswer}`,
-        confidence: 0.5
+        confidence: 0.5,
       };
     }
 
@@ -137,7 +172,7 @@ ${historyText}
 
     return {
       output: finalAnswer,
-      confidence: 0.6 // Confidence is a bit higher because it's a summarized answer
+      confidence: 0.6, // Confidence is a bit higher because it's a summarized answer
     };
-  }
+  },
 });

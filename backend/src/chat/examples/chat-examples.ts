@@ -10,38 +10,39 @@ function fibonacci(n) {
   return fibonacci(n-1) + fibonacci(n-2);
 }
 \`\`\`
-How can I make this more efficient?`
+How can I make this more efficient?`,
   },
 
   // Research questions
   research: {
-    message: "What are the latest developments in artificial intelligence in 2025?"
+    message:
+      'What are the latest developments in artificial intelligence in 2025?',
   },
 
   // Code-related questions without code blocks
   codeQuestion: {
-    message: "What is the best way to optimize JavaScript performance?"
+    message: 'What is the best way to optimize JavaScript performance?',
   },
 
   // Document questions
   documentQuestion: {
-    message: "What are the key points mentioned in my uploaded PDF?"
+    message: 'What are the key points mentioned in my uploaded PDF?',
   },
 
   // Time questions
   timeQuestion: {
-    message: "What time is it in Santo Domingo, Dominican Republic?"
+    message: 'What time is it in Santo Domingo, Dominican Republic?',
   },
 
   // Weather questions
   weatherQuestion: {
-    message: "What's the weather like in New York?"
+    message: "What's the weather like in New York?",
   },
 
   // General chat
   generalChat: {
-    message: "Tell me about traditional Dominican food"
-  }
+    message: 'Tell me about traditional Dominican food',
+  },
 };
 
 /*

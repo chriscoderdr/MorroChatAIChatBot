@@ -9,10 +9,11 @@ import { ChatModule } from '../chat.module';
 import { MongoDBChatMessageHistory } from '../services/mongodb.chat.message.history';
 import { AIMessage, HumanMessage } from '@langchain/core/messages';
 import { ChatSession, ChatSessionSchema } from '../schemas/chat-session.schema';
+import { Model } from 'mongoose';
 
 describe('MongoDB Chat Message History', () => {
   let moduleRef: TestingModule;
-  let chatSessionModel: any;
+  let chatSessionModel: Model<ChatSession>;
 
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
@@ -52,7 +53,7 @@ describe('MongoDB Chat Message History', () => {
 
     // Retrieve the messages
     const messages = await history.getMessages();
-    
+
     // Verify
     expect(messages).toHaveLength(4);
     expect(messages[0].content).toBe('Hello');
@@ -62,7 +63,7 @@ describe('MongoDB Chat Message History', () => {
 
     // Clear the messages
     await history.clear();
-    
+
     // Verify messages were cleared
     const clearedMessages = await history.getMessages();
     expect(clearedMessages).toHaveLength(0);
@@ -71,7 +72,7 @@ describe('MongoDB Chat Message History', () => {
   it('should handle concurrent message additions correctly', async () => {
     const sessionId = `concurrent-test-${Date.now()}`;
     const history = new MongoDBChatMessageHistory(chatSessionModel, sessionId);
-    
+
     // Add multiple messages concurrently
     await Promise.all([
       history.addMessage(new HumanMessage('Message 1')),
@@ -81,17 +82,17 @@ describe('MongoDB Chat Message History', () => {
       history.addMessage(new AIMessage('Response 2')),
       history.addMessage(new AIMessage('Response 3')),
     ]);
-    
+
     // Verify all messages were saved
     const messages = await history.getMessages();
     expect(messages.length).toBe(6);
-    
+
     // Verify message types
-    const humanMessages = messages.filter(m => m._getType() === 'human');
-    const aiMessages = messages.filter(m => m._getType() === 'ai');
+    const humanMessages = messages.filter((m) => m._getType() === 'human');
+    const aiMessages = messages.filter((m) => m._getType() === 'ai');
     expect(humanMessages).toHaveLength(3);
     expect(aiMessages).toHaveLength(3);
-    
+
     // Clean up
     await history.clear();
   });

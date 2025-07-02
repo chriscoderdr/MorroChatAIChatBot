@@ -1,14 +1,18 @@
-import { Res, Get, Logger } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { ChatService } from '../services/chat.service';
-import { Controller, Post, UploadedFile, UseInterceptors, Body, Req } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  UploadedFile,
+  UseInterceptors,
+  Body,
+  Req,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 
 import { PdfVectorService } from '../services/pdf-vector.service';
-import { PdfRetrievalService } from '../services/pdf-retrieval.service';
-import { LangChainService } from '../services/langchain.service';
-import { AgentOrchestrator } from '../agent-orchestrator';
 import { Request } from 'express';
-
+import { Multer } from 'multer';
 
 @Controller('chat')
 export class ChatUploadController {
@@ -16,18 +20,15 @@ export class ChatUploadController {
 
   constructor(
     private readonly pdfVectorService: PdfVectorService,
-    private readonly pdfRetrievalService: PdfRetrievalService,
-    private readonly langChainService: LangChainService,
     private readonly chatService: ChatService,
   ) {}
-
 
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
   async uploadPdf(
-    @UploadedFile() file: any,
+    @UploadedFile() file: Multer.File,
     @Body('message') message: string,
-    @Req() req: Request
+    @Req() req: Request,
   ) {
     try {
       const userId = req.browserSessionId;
@@ -36,36 +37,50 @@ export class ChatUploadController {
         throw new Error('No user session found');
       }
 
-      this.logger.log(`Starting PDF upload for user ${userId}. File: ${file?.originalname}, Size: ${file?.size} bytes`);
-      
+      this.logger.log(
+        `Starting PDF upload for user ${userId}. File: ${file?.originalname}, Size: ${file?.size} bytes`,
+      );
+
       if (!file) {
         this.logger.error('No file uploaded');
         throw new Error('No file uploaded');
       }
 
-      const vectorizeResult = await this.pdfVectorService.vectorizeAndStorePdf(file.buffer, userId, message);
-      this.logger.log(`Vectorization complete. Result: ${JSON.stringify(vectorizeResult)}`);
+      const vectorizeResult = await this.pdfVectorService.vectorizeAndStorePdf(
+        file.buffer,
+        userId,
+        message,
+      );
+      this.logger.log(
+        `Vectorization complete. Result: ${JSON.stringify(vectorizeResult)}`,
+      );
 
       let answer: string | undefined = undefined;
       if (message && message.trim()) {
         try {
           this.logger.log(`Processing user message: "${message}"`);
-          
+
           // Add document upload context to chat history for proper routing
           const documentContext = `[PDF Uploaded] ${file.originalname}`;
           await this.chatService.addDocumentContext(userId, documentContext);
-          
+
           // Now process the message through the normal chat flow with document context
           const result = await this.chatService.processChat(message, userId);
-          answer = result.reply || "Document uploaded successfully. You can now ask questions about it.";
-          
-          this.logger.log(`User message processed successfully. Answer length: ${answer?.length || 0} chars`);
-        } catch (err) {
+          answer =
+            result.reply ||
+            'Document uploaded successfully. You can now ask questions about it.';
+
+          this.logger.log(
+            `User message processed successfully. Answer length: ${answer?.length || 0} chars`,
+          );
+        } catch (err: any) {
           this.logger.error('Error processing document question:', err);
-          answer = "Document uploaded successfully. You can now ask questions about it.";
+          answer =
+            'Document uploaded successfully. You can now ask questions about it.';
         }
       } else {
-        answer = "Document uploaded successfully. You can now ask questions about it.";
+        answer =
+          'Document uploaded successfully. You can now ask questions about it.';
       }
 
       return {

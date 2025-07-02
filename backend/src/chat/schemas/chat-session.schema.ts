@@ -32,8 +32,8 @@ export class StoredMongoMessage {
   @Prop({ type: StoredMessageDataSchema, required: true })
   data: StoredMessageData;
 }
-const StoredMongoMessageSchema = SchemaFactory.createForClass(StoredMongoMessage);
-
+const StoredMongoMessageSchema =
+  SchemaFactory.createForClass(StoredMongoMessage);
 
 @Schema({ timestamps: true })
 export class ChatSession extends Document {

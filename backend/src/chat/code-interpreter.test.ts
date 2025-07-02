@@ -1,8 +1,7 @@
-import { AgentRegistry } from "./agent-registry";
-
-// Test the code interpreter agent with various scenarios
+import { AgentRegistry } from './agent-registry';
+import { AgentContext } from './types';
 export const testCodeInterpreter = async () => {
-  console.log("=== Testing Code Interpreter Agent ===\n");
+  console.log('=== Testing Code Interpreter Agent ===\n');
 
   // Test 1: JavaScript code analysis
   const jsTest = `
@@ -25,13 +24,23 @@ function getUser(id) {
 `;
 
   try {
-    console.log("🔬 Test 1: JavaScript Code Analysis");
-    const result1 = await AgentRegistry.callAgent('code_interpreter', jsTest, { userId: 'test-user' });
-    console.log("Result:", result1.output);
-    console.log("Confidence:", result1.confidence);
-    console.log("\n" + "=".repeat(50) + "\n");
+    console.log('🔬 Test 1: JavaScript Code Analysis');
+    const mockContext1: AgentContext = {
+      sessionId: 'test-session-1',
+      chatHistory: [],
+      input: jsTest,
+      userId: 'test-user',
+    };
+    const result1 = await AgentRegistry.callAgent(
+      'code_interpreter',
+      jsTest,
+      mockContext1,
+    );
+    console.log('Result:', result1.output);
+    console.log('Confidence:', result1.confidence);
+    console.log('\n' + '='.repeat(50) + '\n');
   } catch (error) {
-    console.error("Test 1 failed:", error);
+    console.error('Test 1 failed:', error);
   }
 
   // Test 2: Python code with best practices question
@@ -56,13 +65,23 @@ if __name__ == "__main__":
 `;
 
   try {
-    console.log("🐍 Test 2: Python Best Practices Analysis");
-    const result2 = await AgentRegistry.callAgent('code_interpreter', pythonTest, { userId: 'test-user' });
-    console.log("Result:", result2.output);
-    console.log("Confidence:", result2.confidence);
-    console.log("\n" + "=".repeat(50) + "\n");
+    console.log('🐍 Test 2: Python Best Practices Analysis');
+    const mockContext2: AgentContext = {
+      sessionId: 'test-session-2',
+      chatHistory: [],
+      input: pythonTest,
+      userId: 'test-user',
+    };
+    const result2 = await AgentRegistry.callAgent(
+      'code_interpreter',
+      pythonTest,
+      mockContext2,
+    );
+    console.log('Result:', result2.output);
+    console.log('Confidence:', result2.confidence);
+    console.log('\n' + '='.repeat(50) + '\n');
   } catch (error) {
-    console.error("Test 2 failed:", error);
+    console.error('Test 2 failed:', error);
   }
 
   // Test 3: Complex TypeScript with performance question
@@ -106,13 +125,23 @@ class UserService {
 `;
 
   try {
-    console.log("⚡ Test 3: TypeScript Performance Optimization");
-    const result3 = await AgentRegistry.callAgent('code_interpreter', tsTest, { userId: 'test-user' });
-    console.log("Result:", result3.output);
-    console.log("Confidence:", result3.confidence);
-    console.log("\n" + "=".repeat(50) + "\n");
+    console.log('⚡ Test 3: TypeScript Performance Optimization');
+    const mockContext3: AgentContext = {
+      sessionId: 'test-session-3',
+      chatHistory: [],
+      input: tsTest,
+      userId: 'test-user',
+    };
+    const result3 = await AgentRegistry.callAgent(
+      'code_interpreter',
+      tsTest,
+      mockContext3,
+    );
+    console.log('Result:', result3.output);
+    console.log('Confidence:', result3.confidence);
+    console.log('\n' + '='.repeat(50) + '\n');
   } catch (error) {
-    console.error("Test 3 failed:", error);
+    console.error('Test 3 failed:', error);
   }
 
   // Test 4: Multiple code blocks
@@ -158,13 +187,23 @@ function quickSort(arr) {
 `;
 
   try {
-    console.log("🔄 Test 4: Multiple Code Blocks Comparison");
-    const result4 = await AgentRegistry.callAgent('code_interpreter', multiTest, { userId: 'test-user' });
-    console.log("Result:", result4.output);
-    console.log("Confidence:", result4.confidence);
-    console.log("\n" + "=".repeat(50) + "\n");
+    console.log('🔄 Test 4: Multiple Code Blocks Comparison');
+    const mockContext4: AgentContext = {
+      sessionId: 'test-session-4',
+      chatHistory: [],
+      input: multiTest,
+      userId: 'test-user',
+    };
+    const result4 = await AgentRegistry.callAgent(
+      'code_interpreter',
+      multiTest,
+      mockContext4,
+    );
+    console.log('Result:', result4.output);
+    console.log('Confidence:', result4.confidence);
+    console.log('\n' + '='.repeat(50) + '\n');
   } catch (error) {
-    console.error("Test 4 failed:", error);
+    console.error('Test 4 failed:', error);
   }
 
   // Test 5: Error handling
@@ -173,16 +212,26 @@ How do I fix this bug?
 `;
 
   try {
-    console.log("❌ Test 5: No Code Provided");
-    const result5 = await AgentRegistry.callAgent('code_interpreter', noCodeTest, { userId: 'test-user' });
-    console.log("Result:", result5.output);
-    console.log("Confidence:", result5.confidence);
-    console.log("\n" + "=".repeat(50) + "\n");
+    console.log('❌ Test 5: No Code Provided');
+    const mockContext5: AgentContext = {
+      sessionId: 'test-session-5',
+      chatHistory: [],
+      input: noCodeTest,
+      userId: 'test-user',
+    };
+    const result5 = await AgentRegistry.callAgent(
+      'code_interpreter',
+      noCodeTest,
+      mockContext5,
+    );
+    console.log('Result:', result5.output);
+    console.log('Confidence:', result5.confidence);
+    console.log('\n' + '='.repeat(50) + '\n');
   } catch (error) {
-    console.error("Test 5 failed:", error);
+    console.error('Test 5 failed:', error);
   }
 
-  console.log("=== Code Interpreter Tests Completed ===");
+  console.log('=== Code Interpreter Tests Completed ===');
 };
 
 // Example usage

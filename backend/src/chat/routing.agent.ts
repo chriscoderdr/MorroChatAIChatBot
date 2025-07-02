@@ -1,35 +1,50 @@
-import { AgentRegistry } from "./agent-registry";
-import { Logger } from "@nestjs/common";
-import { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import { ChatOpenAI } from "@langchain/openai";
+import { AgentRegistry } from './agent-registry';
+import { Logger } from '@nestjs/common';
+import { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { ChatOpenAI } from '@langchain/openai';
+import { BaseMessage } from '@langchain/core/messages';
+import { AgentContext } from './types';
 
 // Helper method to check if documents are available in chat context
-const hasDocumentContext = (context: any): boolean => {
-  return context.chatHistory && context.chatHistory.some((msg: any) => 
-    msg.content && (
-      msg.content.includes('[PDF Uploaded]') || 
-      msg.content.includes('[Document Uploaded]') ||
-      msg.content.includes('[File Uploaded]') ||
-      msg.content.includes('.pdf') ||
-      msg.content.includes('.docx') ||
-      msg.content.includes('.txt')
-    )
+const hasDocumentContext = (context: AgentContext): boolean => {
+  return (
+    context.chatHistory &&
+    context.chatHistory.some((msg: BaseMessage) => {
+      const content =
+        typeof msg.content === 'string'
+          ? msg.content
+          : JSON.stringify(msg.content);
+      return (
+        content &&
+        (content.includes('[PDF Uploaded]') ||
+          content.includes('[Document Uploaded]') ||
+          content.includes('[File Uploaded]') ||
+          content.includes('.pdf') ||
+          content.includes('.docx') ||
+          content.includes('.txt'))
+      );
+    })
   );
 };
 
 // Get a description of each agent for the LLM to understand its purpose
 const getAgentDescription = (agentName: string): string => {
   const descriptions: Record<string, string> = {
-    'general': 'A general-purpose conversational agent for a wide range of topics, including answering questions about itself.',
-    'research': 'Provides detailed factual information by searching the web. Handles companies, news, people, and knowledge-based topics.',
-    'time': 'Provides current time, date, and timezone information.',
-    'weather': 'Provides weather forecasts and current conditions.',
-    'document_search': 'Searches through user-uploaded documents to find specific information.',
-    'summarizer': 'Summarizes long pieces of text or content.',
-    'code_interpreter': 'Analyzes, explains, and executes code snippets.',
-    'code_optimization': 'Optimizes and improves existing code.'
+    general:
+      'A general-purpose conversational agent for a wide range of topics, including answering questions about itself.',
+    research:
+      'Provides detailed factual information by searching the web. Handles companies, news, people, and knowledge-based topics.',
+    time: 'Provides current time, date, and timezone information.',
+    weather: 'Provides weather forecasts and current conditions.',
+    document_search:
+      'Searches through user-uploaded documents to find specific information.',
+    summarizer: 'Summarizes long pieces of text or content.',
+    code_interpreter: 'Analyzes, explains, and executes code snippets.',
+    code_optimization: 'Optimizes and improves existing code.',
   };
-  return descriptions[agentName] || `Agent that handles ${agentName}-related queries`;
+  return (
+    descriptions[agentName] || `Agent that handles ${agentName}-related queries`
+  );
 };
 
 /**
@@ -38,13 +53,14 @@ const getAgentDescription = (agentName: string): string => {
  */
 AgentRegistry.register({
   name: 'routing',
-  description: 'Determines the best agent to handle a user query using LLM analysis',
-  handle: async (input, context, callAgent) => {
+  description:
+    'Determines the best agent to handle a user query using LLM analysis',
+  handle: async (input, context, _callAgent) => {
     const logger = new Logger('RoutingAgent');
-    
+
     try {
       const { availableAgents, llm } = context;
-      
+
       if (!availableAgents || !Array.isArray(availableAgents)) {
         throw new Error('Invalid routing context: missing availableAgents');
       }
@@ -57,10 +73,18 @@ AgentRegistry.register({
       const systemPrompt = `CRITICAL: You are a JSON-only routing API. You MUST return ONLY a JSON object. NO conversational text.
 
 AVAILABLE AGENTS:
-${availableAgents.map(agent => `- ${agent}: ${getAgentDescription(agent)}`).join('\n')}
+${availableAgents.map((agent) => `- ${agent}: ${getAgentDescription(agent)}`).join('\n')}
 
 USER QUERY: "${input}"
-${context.chatHistory && context.chatHistory.length > 0 ? `\nCONTEXT: ${context.chatHistory.slice(-2).map((msg: any) => `${msg.type}: ${msg.content}`).join(', ')}` : ''}
+${
+  context.chatHistory && context.chatHistory.length > 0
+    ? `\nCONTEXT: ${context.chatHistory
+        .slice(-2)
+
+        .map((msg: BaseMessage) => `${msg._getType()}: ${msg.content}`)
+        .join(', ')}`
+    : ''
+}
 ${hasDocuments ? '\n⚠️  DOCUMENT CONTEXT DETECTED: User has uploaded documents. For ambiguous queries, prefer document_search agent.' : ''}
 
 ROUTING RULES (STRICT PRIORITY ORDER):
@@ -78,35 +102,36 @@ MANDATORY RESPONSE FORMAT - RESPOND WITH ONLY THIS JSON:
 
 DO NOT WRITE ANY OTHER TEXT. ONLY JSON.`;
 
-      logger.log(`Routing agent analyzing query: "${input.substring(0, 50)}..."`);
-      
+      logger.log(
+        `Routing agent analyzing query: "${input.substring(0, 50)}..."`,
+      );
+
       let result;
       if (llm instanceof ChatOpenAI) {
         const boundLLM = llm.bind({
-          response_format: { type: "json_object" },
+          response_format: { type: 'json_object' },
         });
         result = await boundLLM.invoke(systemPrompt);
       } else {
         result = await llm.invoke(systemPrompt);
       }
       const output = result.content.toString();
-      
+
       logger.log(`Routing agent raw LLM response: ${output}`);
-      
+
       return { output, confidence: 0.9 };
-      
-    } catch (error) {
+    } catch (error: any) {
       logger.error(`Error in routing agent: ${error.message}`, error.stack);
       return {
         output: JSON.stringify({
           error: 'routing_failed',
           message: error.message,
-          fallback: true
+          fallback: true,
         }),
-        confidence: 0.0
+        confidence: 0.0,
       };
     }
-  }
+  },
 });
 
 console.log('Routing agent registered successfully');

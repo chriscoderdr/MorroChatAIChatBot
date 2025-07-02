@@ -1,0 +1,54 @@
+import { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { BaseMessage } from '@langchain/core/messages';
+
+export type AgentName =
+  | 'document_search'
+  | 'DocumentSearchAgent'
+  | 'code_interpreter'
+  | 'CodeInterpreterAgent'
+  | 'code_optimization'
+  | 'CodeOptimizationAgent'
+  | 'general'
+  | 'GeneralAgent'
+  | 'research'
+  | 'ResearchAgent'
+  | 'routing'
+  | 'RoutingAgent'
+  | 'summarizer'
+  | 'SummarizerAgent'
+  | 'weather'
+  | 'WeatherAgent'
+  | 'web_search'
+  | 'time'
+  | 'current_time'
+  | 'open_weather_map'
+  | 'subject_inference';
+
+export interface AgentContext {
+  sessionId: string;
+  chatHistory: BaseMessage[];
+  input: string;
+  llm?: BaseChatModel;
+  [key: string]: any;
+}
+
+export interface AgentResult {
+  output: string;
+  [key: string]: any;
+}
+
+export interface Agent {
+  name: AgentName;
+  description: string;
+  handle: AgentHandler;
+}
+
+export type AgentHandler = (
+  input: string,
+  context: AgentContext,
+  callAgent?: (
+    name: AgentName,
+    input: string,
+    context: AgentContext,
+  ) => Promise<AgentResult>,
+) => Promise<AgentResult>;
