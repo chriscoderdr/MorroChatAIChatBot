@@ -67,6 +67,7 @@ AgentRegistry.register({
       }
 
       const hasDocuments = hasDocumentContext(context);
+      const { chatDefaultTopic } = context;
 
       const routableAgents = availableAgents
         .map((agent) => ({
@@ -75,8 +76,16 @@ AgentRegistry.register({
         }))
         .filter((agent) => agent.description);
 
-      const systemPrompt = `CRITICAL: You are a JSON-only routing API. You MUST return ONLY a JSON object. NO conversational text.
+      const topicRule = chatDefaultTopic
+        ? `
+IMPORTANT TOPIC RESTRICTION: This chat is strictly focused on "${chatDefaultTopic}".
+- If the user's query is NOT about "${chatDefaultTopic}", you MUST route to the "general" agent.
+- If the query IS about "${chatDefaultTopic}", proceed with normal routing rules.
+`
+        : '';
 
+      const systemPrompt = `CRITICAL: You are a JSON-only routing API. You MUST return ONLY a JSON object. NO conversational text.
+${topicRule}
 AVAILABLE AGENTS:
 ${routableAgents
   .map((agent) => `- ${agent.name}: ${agent.description}`)
@@ -95,14 +104,15 @@ ${
 ${hasDocuments ? '\n⚠️  DOCUMENT CONTEXT DETECTED: User has uploaded documents. For ambiguous queries, prefer document_search agent.' : ''}
 
 ROUTING RULES (STRICT PRIORITY ORDER):
-1. Personal/conversational queries (greetings, introductions) → general
-2. Time queries ("time", "date", "today") → time
-3. Weather queries ("weather", "temperature") → weather
-4. Explicit document queries ("document", "what is this about") → document_search
-5. Research queries (companies, people, facts) → research
-6. Code queries → code_interpreter
-7. Ambiguous queries WITH document context → document_search
-8. Everything else → general
+${chatDefaultTopic ? `1. Queries unrelated to "${chatDefaultTopic}" → general` : ''}
+2. Personal/conversational queries (greetings, introductions) → general
+3. Time queries ("time", "date", "today") → time
+4. Weather queries ("weather", "temperature") → weather
+5. Explicit document queries ("document", "what is this about") → document_search
+6. Research queries (companies, people, facts) → research
+7. Code queries → code_interpreter
+8. Ambiguous queries WITH document context → document_search
+9. Everything else → general
 
 MANDATORY RESPONSE FORMAT - RESPOND WITH ONLY THIS JSON:
 {"agentName": "agent_name", "confidence": 0.85, "reasoning": "brief reason"}

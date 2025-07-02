@@ -5,4 +5,5 @@ export default registerAs('app', () => ({
   port: parseInt(process.env.PORT || '3000', 10),
   apiPrefix: process.env.API_PREFIX || 'api',
   apiVersion: process.env.API_VERSION || 'v1',
+  chatDefaultTopic: process.env.CHAT_DEFAULT_TOPIC,
 }));

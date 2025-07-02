@@ -81,6 +81,7 @@ set in .env a chat topic like
 | Frontend  | http://localhost:5173      | MorroChat UI (React/Vite)  |
 | Backend   | http://localhost:3000      | NestJS API                 |
 | MongoDB   | mongodb://root:example@localhost:27017/morrochat?authSource=admin | Database connection string |
+| SearXNG   | http://localhost:8888      | Metasearch Engine          |
 
 ---
 
@@ -105,6 +106,12 @@ set in .env a chat topic like
   - user: `root`
   - pass: `example`
   - db: `morrochat`
+
+### 4. Metasearch (SearXNG)
+- **Image:** `searxng/searxng:latest`
+- **Ports:** `8888:8080`
+- **Configuration:** `/searxng/settings.yml`
+- **Description:** A privacy-respecting, hackable metasearch engine that provides search results from various sources.
 
 ---
 

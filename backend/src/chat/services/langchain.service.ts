@@ -1,3 +1,4 @@
+import { BraveSearch } from '@langchain/community/tools/brave_search';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { TavilySearch } from '@langchain/tavily';
@@ -49,22 +50,117 @@ export class LangChainService {
     const searchTool = new DynamicStructuredTool({
       name: 'web_search',
       description:
-        'Searches the web for up-to-date information. Research info about companies. Resarch info.',
+        'Searches the web for up-to-date information using a configurable search engine.',
       schema: z.object({
         query: z.string().describe('A keyword-based search query.'),
       }),
       func: async ({ query }) => {
-        try {
-          const tavilyApiKey = this.configService.get<string>('TAVILY_API_KEY');
-          if (!tavilyApiKey) {
-            this.logger.error('Tavily API key is not configured.');
-            return 'Search failed due to missing API key.';
+        const searxngBaseUrl =
+          this.configService.get<string>('SEARXNG_BASE_URL') || 'http://localhost:8888';
+        const braveApiKey = this.configService.get<string>('BRAVE_API_KEY');
+        const tavilyApiKey = this.configService.get<string>('TAVILY_API_KEY');
+
+        // Priority: SearxNG -> Brave -> Tavily -> Public SearxNG fallback
+        if (searxngBaseUrl) {
+          this.logger.log('Using SearxNG for web search.');
+          const url = new URL(searxngBaseUrl);
+          url.searchParams.append('q', query);
+          url.searchParams.append('format', 'json');
+          try {
+            const response = await fetch(url.toString(), {
+              headers: { Accept: 'application/json' },
+            });
+            if (!response.ok) {
+              const errorBody = await response.text();
+              this.logger.error(
+                `SearxNG request failed with status ${response.status} for query: ${query}. Body: ${errorBody}`,
+              );
+              return `Search failed: The search engine returned an error (status ${response.status}).`;
+            }
+            const responseText = await response.text();
+            try {
+              const json = JSON.parse(responseText);
+              if (json.results && Array.isArray(json.results)) {
+                return json.results
+                  .map(
+                    (result: any) =>
+                      `Title: ${result.title}\nURL: ${result.url}\nSnippet: ${result.content}`,
+                  )
+                  .join('\n\n');
+              }
+              return 'No results found.';
+            } catch (e) {
+              this.logger.error(
+                `SearxNG returned non-JSON response for query: "${query}".\nRESPONSE BODY:\n${responseText}`,
+              );
+              return 'Search failed: The search engine returned an invalid response (not JSON).';
+            }
+          } catch (e) {
+            this.logger.error(
+              `SearxNG search failed for query: ${query}`,
+              e.stack,
+            );
+            return 'Search failed.';
           }
-          const tavilySearch = new TavilySearch({ tavilyApiKey });
-          return await tavilySearch.invoke({ query });
+        } else if (braveApiKey) {
+          this.logger.log('Using Brave for web search.');
+          try {
+            const brave = new BraveSearch({ apiKey: braveApiKey });
+            return await brave.invoke(query);
+          } catch (e) {
+            this.logger.error('Brave search failed, falling back to SearxNG', e.stack);
+          }
+        } else if (tavilyApiKey) {
+          this.logger.log('Using Tavily for web search.');
+          try {
+            const tavily = new TavilySearch({ tavilyApiKey });
+            return await tavily.invoke({ query });
+          } catch (e) {
+            this.logger.error('Tavily search failed, falling back to SearxNG', e.stack);
+          }
+        }
+        
+        // Fallback to SearxNG if other methods fail or are not configured
+        this.logger.log(
+          'No search provider configured or primary search failed, defaulting to public SearxNG instance.',
+        );
+        const fallbackUrl = 'https://searx.info/';
+        const url = new URL(fallbackUrl);
+        url.searchParams.append('q', query);
+        url.searchParams.append('format', 'json');
+        // Re-implementing fetch logic for fallback
+        try {
+          const response = await fetch(url.toString(), {
+            headers: { Accept: 'application/json' },
+          });
+          if (!response.ok) {
+            const errorBody = await response.text();
+            this.logger.error(
+              `Fallback SearxNG request failed with status ${response.status} for query: ${query}. Body: ${errorBody}`,
+            );
+            return `Search failed: The fallback search engine returned an error (status ${response.status}).`;
+          }
+          const responseText = await response.text();
+          try {
+            const json = JSON.parse(responseText);
+            if (json.results && Array.isArray(json.results)) {
+              return json.results
+                .map(
+                  (result: any) =>
+                    `Title: ${result.title}\nURL: ${result.url}\nSnippet: ${result.content}`,
+                )
+                .join('\n\n');
+            }
+            return 'No results found.';
+          } catch (e) {
+            this.logger.error(
+              `Fallback SearxNG returned non-JSON response for query: "${query}".\nRESPONSE BODY:\n${responseText}`,
+            );
+            return 'Search failed: The fallback search engine returned an invalid response (not JSON).';
+          }
         } catch (e) {
           this.logger.error(
-            `Tavily search failed for query: ${query}`,
+            `Fallback SearxNG search failed for query: ${query}`,
             e.stack,
           );
           return 'Search failed.';
@@ -119,7 +215,9 @@ export class LangChainService {
         if (!apiKey) return 'OpenWeatherMap API key is missing.';
 
         try {
-          const geoUrl = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(location)}&limit=1&appid=${apiKey}`;
+          const geoUrl = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(
+            location,
+          )}&limit=1&appid=${apiKey}`;
           const geoRes = await fetch(geoUrl);
           if (!geoRes.ok)
             return `Could not find location data for ${location}. API returned error ${geoRes.status}.`;
@@ -150,10 +248,10 @@ export class LangChainService {
       AgentRegistry.register({
         name: 'web_search',
         description: searchTool.description,
-        handle: async (input, _context) => ({
-          output: await searchTool.func({ query: input }),
-          confidence: 0.8,
-        }),
+        handle: async (input, _context) => {
+          const output = await searchTool.invoke({ query: input });
+          return { output, confidence: 0.8 };
+        },
       });
     }
     if (!AgentRegistry.getAgent('current_time')) {
@@ -177,7 +275,6 @@ export class LangChainService {
       });
     }
 
-
     const finalRunnable = new RunnableLambda({
       func: async (
         input: { input: string; chat_history: BaseMessage[] },
@@ -200,6 +297,7 @@ export class LangChainService {
           chatHistory: input.chat_history,
           llm,
           geminiApiKey: this.configService.get<string>('GEMINI_API_KEY'),
+          chatDefaultTopic: this.configService.get<string>('app.chatDefaultTopic'),
           configurable: { ...(config?.configurable || {}), sessionId },
           metadata: { ...(config?.metadata || {}), sessionId },
           ...config,

@@ -29,6 +29,7 @@ export interface AgentContext {
   chatHistory: BaseMessage[];
   input: string;
   llm?: BaseChatModel;
+  chatDefaultTopic?: string;
   [key: string]: any;
 }
 

@@ -1,0 +1,8 @@
+use_default_settings: true
+server:
+  secret_key: "a_very_secret_key_that_is_long_enough"
+  base_url: "http://localhost:8888/"
+search:
+  formats:
+    - html
+    - json
