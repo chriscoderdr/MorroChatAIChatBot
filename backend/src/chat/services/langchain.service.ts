@@ -177,16 +177,6 @@ export class LangChainService {
       });
     }
 
-    if (!AgentRegistry.getAgent('time')) {
-      AgentRegistry.register({
-        name: 'time',
-        description: currentTimeTool.description,
-        handle: async (input, _context) => ({
-          output: await currentTimeTool.func({ timezone: input }),
-          confidence: 0.95,
-        }),
-      });
-    }
 
     const finalRunnable = new RunnableLambda({
       func: async (
