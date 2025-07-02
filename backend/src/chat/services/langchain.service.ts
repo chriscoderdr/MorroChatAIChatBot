@@ -47,7 +47,20 @@ export class LangChainService {
       name: "web_search",
       description: "Searches the web for up-to-date information. Research info about companies. Resarch info.",
       schema: z.object({ query: z.string().describe("A keyword-based search query.") }),
-      func: async ({ query }) => { try { return await new TavilySearch().invoke({ query }); } catch (e) { this.logger.error(`Tavily search failed for query: ${query}`, e.stack); return "Search failed."; } },
+      func: async ({ query }) => {
+        try {
+          const tavilyApiKey = this.configService.get<string>('TAVILY_API_KEY');
+          if (!tavilyApiKey) {
+            this.logger.error('Tavily API key is not configured.');
+            return "Search failed due to missing API key.";
+          }
+          const tavilySearch = new TavilySearch({ tavilyApiKey });
+          return await tavilySearch.invoke({ query });
+        } catch (e) {
+          this.logger.error(`Tavily search failed for query: ${query}`, e.stack);
+          return "Search failed.";
+        }
+      },
     });
 
     const currentTimeTool = new DynamicStructuredTool({

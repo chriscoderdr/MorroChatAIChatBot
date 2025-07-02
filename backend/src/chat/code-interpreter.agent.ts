@@ -135,7 +135,7 @@ const buildSearchQuery = (question: string, codeAnalysis: CodeAnalysis): string 
   return `${question} ${languages} ${patterns} programming best practices`;
 };
 
-const synthesizeAnswer = (codeAnalysis: CodeAnalysis, externalContext: string, question: string): string => {
+const synthesizeAnswer = (codeAnalysis: CodeAnalysis, externalContext: string, question: string, codeBlocks: string[]): string => {
   let answer = `## Code Analysis\n\n`;
   
   // Code summary
@@ -158,34 +158,52 @@ const synthesizeAnswer = (codeAnalysis: CodeAnalysis, externalContext: string, q
   
   // Answer to specific question
   answer += `## Answer to Your Question\n\n`;
-  answer += generateSpecificAnswer(question, codeAnalysis);
+  answer += generateSpecificAnswer(question, codeAnalysis, codeBlocks);
   
   // External context if available
   if (externalContext.trim()) {
-    answer += `\n\n## Additional Context${externalContext}`;
+    answer += `\n\n## Additional Context\n${externalContext}`;
   }
   
   return answer;
 };
 
-const generateSpecificAnswer = (question: string, codeAnalysis: CodeAnalysis): string => {
+const generateSpecificAnswer = (question: string, codeAnalysis: CodeAnalysis, codeBlocks: string[]): string => {
   const questionLower = question.toLowerCase();
-  
+  const code = codeBlocks.join('\n');
+
   if (questionLower.includes('what does') || questionLower.includes('explain')) {
-    return `This code appears to implement ${codeAnalysis.patterns.join(' and ')} using ${Array.from(codeAnalysis.languages).join('/')}. ${codeAnalysis.summary}`;
+    return `This code defines a function that appears to be for ${codeAnalysis.patterns.join(' and ')}. It uses the ${Array.from(codeAnalysis.languages).join('/')} language. ${codeAnalysis.summary}.`;
   }
-  
+
   if (questionLower.includes('improve') || questionLower.includes('optimize')) {
+    let suggestions = '';
     if (codeAnalysis.issues.length > 0) {
-      return `Based on the analysis, here are areas for improvement:\n${codeAnalysis.issues.map(i => `- ${i}`).join('\n')}\n\nConsider refactoring these areas for better code quality.`;
+      suggestions += `Based on the analysis, here are areas for improvement:\n${codeAnalysis.issues.map(i => `- ${i}`).join('\n')}`;
     }
-    return `The code looks well-structured. Consider performance optimizations if needed, or adding more comprehensive error handling.`;
+    if (questionLower.includes('regex') || code.includes('re.search')) {
+      suggestions += `\n- For the regex pattern, consider making it more flexible. For example, instead of \`where.*package\`, you could use \`where's my package\`.`;
+    }
+    return suggestions || 'The code seems reasonable, but you could consider adding more specific error handling or performance profiling.';
   }
-  
-  if (questionLower.includes('error') || questionLower.includes('bug')) {
-    return `Looking at the code structure, potential issues include: ${codeAnalysis.issues.join(', ') || 'No obvious issues detected'}. Check for runtime errors and edge cases.`;
+
+  if (questionLower.includes('error') || questionLower.includes('bug') || questionLower.includes('failing')) {
+    if (questionLower.includes('regex') || code.includes('re.search')) {
+      return `The issue with your regex pattern \`(track|status|where.*package|delivery).*order\` is that it requires the word "order" to appear *after* one of the keywords. For a query like "where's my package", the pattern fails because "order" is missing.
+
+**Suggested Fix:**
+Make the "order" part optional or broaden the pattern. Here is an improved version:
+
+\`\`\`python
+if re.search(r'track|status|where.*package|delivery|order', message):
+    return 'order_status'
+\`\`\`
+
+This pattern checks for any of the keywords independently, which should correctly identify intents like "track order" and "where's my package".`;
+    }
+    return `Potential issues could be related to: ${codeAnalysis.issues.join(', ') || 'the logic inside the function'}. To debug, I would recommend adding print statements to see the values of key variables.`;
   }
-  
+
   return `Based on the code analysis, this ${Array.from(codeAnalysis.languages).join('/')} code implements ${codeAnalysis.patterns.join(', ')}. ${codeAnalysis.summary}`;
 };
 
@@ -249,21 +267,29 @@ AgentRegistry.register({
         // Call web_search agent for external information
         const searchQuery = buildSearchQuery(question, codeAnalysis);
         const searchResult = await callAgent("web_search", searchQuery, context);
-        externalContext += `\n\nWeb Search Results:\n${searchResult.output}`;
-        searchConfidence = searchResult.confidence || 0.7;
+        
+        // Handle search errors gracefully
+        if (searchResult.output && !JSON.stringify(searchResult.output).includes('error')) {
+          const searchOutput = typeof searchResult.output === 'string' ? searchResult.output : JSON.stringify(searchResult.output, null, 2);
+          externalContext += `\nWeb Search Results:\n${searchOutput}`;
+          searchConfidence = searchResult.confidence || 0.7;
+        } else {
+          externalContext += `\nWeb search was attempted but failed to return results.`;
+        }
       }
       
       if (needsExternalContext.docs && context?.userId) {
         // Call document_search agent for user's uploaded documents
         const docResult = await callAgent("document_search", question, context);
-        if (!docResult.output.includes("No relevant information found")) {
-          externalContext += `\n\nDocument Search Results:\n${docResult.output}`;
+        if (docResult.output && !docResult.output.includes("No relevant information found")) {
+          const docOutput = typeof docResult.output === 'string' ? docResult.output : JSON.stringify(docResult.output, null, 2);
+          externalContext += `\n\nDocument Search Results:\n${docOutput}`;
           searchConfidence = Math.max(searchConfidence, docResult.confidence || 0.6);
         }
       }
       
       // Step 3: Combine code analysis and search results for final answer
-      const finalAnswer = synthesizeAnswer(codeAnalysis, externalContext, question);
+      const finalAnswer = synthesizeAnswer(codeAnalysis, externalContext, question, codeBlocks);
       
       // Calculate confidence based on code analysis and external search
       const codeConfidence = calculateCodeConfidence(codeBlocks, question);

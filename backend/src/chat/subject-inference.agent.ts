@@ -24,16 +24,22 @@ AgentRegistry.register({
 
 **Instructions:**
 1.  Read the conversation history carefully to understand what is being discussed.
-2.  Identify the main noun or entity (the "subject").
+2.  Identify the main noun or entity (the "subject") that the user's latest message is referring to, based on the history.
 3.  Extract any critical descriptive details about that subject (e.g., "a Dominican software company," "a British punk band," "a constitutional article"). This description is vital for disambiguation.
 4.  Return a single, clean JSON object with two keys: "subject" and "description".
 5.  The "description" MUST NOT be empty if there is descriptive context available in the history.
-6.  If no specific subject can be determined, return an empty JSON object: {}.
+6.  **IMPORTANT**: If the user's latest message is a direct question to you (the assistant, e.g., "who are you?", "can you help me?"), is a greeting, or starts a completely new, unrelated topic, **ignore the previous history** and return an empty JSON object \`{}\`.
+7.  If no specific subject can be determined from the history for a follow-up question, return an empty JSON object: {}.
 
-**Example:**
+**Example 1 (Follow-up):**
 *   History: "human: Tell me about GBH, the Dominican software company."
 *   User's latest message: "When was it founded?"
 *   Correct JSON Response: {"subject": "GBH", "description": "Dominican software company"}
+
+**Example 2 (New Topic / Direct Question):**
+*   History: "human: Tell me about this Python code..."
+*   User's latest message: "hablas español?"
+*   Correct JSON Response: {}
 
 **Conversation History:**
 ${recentMessages}

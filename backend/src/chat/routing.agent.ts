@@ -20,7 +20,7 @@ const hasDocumentContext = (context: any): boolean => {
 // Get a description of each agent for the LLM to understand its purpose
 const getAgentDescription = (agentName: string): string => {
   const descriptions: Record<string, string> = {
-    'general': 'A general-purpose conversational agent for a wide range of topics.',
+    'general': 'A general-purpose conversational agent for a wide range of topics, including answering questions about itself.',
     'research': 'Provides detailed factual information by searching the web. Handles companies, news, people, and knowledge-based topics.',
     'time': 'Provides current time, date, and timezone information.',
     'weather': 'Provides weather forecasts and current conditions.',
