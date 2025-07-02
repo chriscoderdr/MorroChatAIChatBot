@@ -10,9 +10,7 @@ interface CodeAnalysis {
 }
 
 // Helper functions for code analysis
-const analyzeCode = (
-  codeBlocks: string[],
-): CodeAnalysis => {
+const analyzeCode = (codeBlocks: string[]): CodeAnalysis => {
   const analysis: CodeAnalysis = {
     languages: new Set<string>(),
     patterns: [],
