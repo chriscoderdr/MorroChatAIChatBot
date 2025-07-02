@@ -19,25 +19,25 @@ export const UserMessageBubble: React.FC<UserMessageBubbleProps> = ({
   // If no code blocks or PDF uploads, render as simple text
   if (!containsCode && !containsPdf) {
     return (
-      <div className={`bg-blue-600 text-white rounded-2xl px-4 py-3 ${className}`}>
-        <p className="text-sm whitespace-pre-wrap">{message}</p>
+      <div className={`bg-blue-600 text-white rounded-2xl px-4 py-3 break-words overflow-wrap-anywhere ${className}`}>
+        <p className="text-sm whitespace-pre-wrap break-words overflow-wrap-anywhere">{message}</p>
       </div>
     );
   }
 
   // Render with mixed content (text, code blocks, PDF uploads)
   return (
-    <div className={`space-y-3 ${className}`}>
+    <div className={`space-y-3 break-words overflow-wrap-anywhere ${className}`}>
       {parsedContent.map((part, index) => {
         if (part.type === 'text') {
           return (
-            <div key={index} className="bg-blue-600 text-white rounded-2xl px-4 py-3">
-              <p className="text-sm whitespace-pre-wrap">{part.content}</p>
+            <div key={index} className="bg-blue-600 text-white rounded-2xl px-4 py-3 break-words overflow-wrap-anywhere">
+              <p className="text-sm whitespace-pre-wrap break-words overflow-wrap-anywhere">{part.content}</p>
             </div>
           );
         } else if (part.type === 'code') {
           return (
-            <div key={index} className="bg-blue-600 text-white rounded-2xl px-4 py-3">
+            <div key={index} className="bg-blue-600 text-white rounded-2xl px-4 py-3 break-words overflow-wrap-anywhere">
               <div className="not-prose">
                 <CodeSnippetCard
                   code={part.content}

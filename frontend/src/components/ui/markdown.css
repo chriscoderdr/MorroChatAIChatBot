@@ -1,6 +1,14 @@
 /* Markdown content specific styles */
 .markdown-content {
   line-height: 1.6;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+
+.markdown-content * {
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
 }
 
 .markdown-content > *:first-child {
@@ -99,4 +107,26 @@
   .code-block-header .flex {
     gap: 0.5rem;
   }
+}
+
+/* Better handling of long words and URLs */
+.markdown-content a {
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+
+.markdown-content code:not(pre code) {
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* Ensure no horizontal overflow */
+.markdown-content {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.markdown-content * {
+  max-width: 100%;
 }

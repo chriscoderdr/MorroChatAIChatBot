@@ -13,7 +13,7 @@ interface ComponentProps {
 
 export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
   return (
-    <div className="markdown-content">
+    <div className="markdown-content break-words overflow-wrap-anywhere">
       <ReactMarkdown
         components={{
           // Custom code block renderer
@@ -33,7 +33,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) =
           
           // Custom paragraph renderer with enhanced spacing
           p: ({ children }: ComponentProps) => (
-            <p className="mb-4 text-gray-200 leading-relaxed last:mb-2 text-sm sm:text-base">
+            <p className="mb-4 text-gray-200 leading-relaxed last:mb-2 text-sm sm:text-base break-words overflow-wrap-anywhere">
               {children}
             </p>
           ),
@@ -57,25 +57,25 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) =
           
           // Enhanced list renderers with better styling
           ul: ({ children }: ComponentProps) => (
-            <ul className="list-disc list-inside mb-4 text-gray-200 space-y-2 text-sm sm:text-base">
+            <ul className="list-disc list-inside mb-4 text-gray-200 space-y-2 text-sm sm:text-base break-words overflow-wrap-anywhere">
               {children}
             </ul>
           ),
           ol: ({ children }: ComponentProps) => (
-            <ol className="list-decimal list-inside mb-4 text-gray-200 space-y-2 text-sm sm:text-base">
+            <ol className="list-decimal list-inside mb-4 text-gray-200 space-y-2 text-sm sm:text-base break-words overflow-wrap-anywhere">
               {children}
             </ol>
           ),
           li: ({ children }: ComponentProps) => (
-            <li className="ml-2 leading-relaxed">
+            <li className="ml-2 leading-relaxed break-words overflow-wrap-anywhere">
               {children}
             </li>
           ),
           
           // Enhanced blockquote for performance tips and insights
           blockquote: ({ children }: ComponentProps) => (
-            <blockquote className="border-l-4 border-blue-500 pl-4 py-3 my-4 bg-gradient-to-r from-blue-900/20 to-transparent rounded-r-lg">
-              <div className="text-gray-300 italic text-sm sm:text-base">
+            <blockquote className="border-l-4 border-blue-500 pl-4 py-3 my-4 bg-gradient-to-r from-blue-900/20 to-transparent rounded-r-lg break-words overflow-wrap-anywhere">
+              <div className="text-gray-300 italic text-sm sm:text-base break-words overflow-wrap-anywhere">
                 {children}
               </div>
             </blockquote>
@@ -83,14 +83,14 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) =
           
           // Enhanced strong/bold renderer for key concepts
           strong: ({ children }: ComponentProps) => (
-            <strong className="font-bold text-white bg-gray-700/30 px-1 py-0.5 rounded text-sm">
+            <strong className="font-bold text-white bg-gray-700/30 px-1 py-0.5 rounded text-sm break-words overflow-wrap-anywhere">
               {children}
             </strong>
           ),
           
           // Custom emphasis/italic renderer
           em: ({ children }: ComponentProps) => (
-            <em className="italic text-blue-300">
+            <em className="italic text-blue-300 break-words overflow-wrap-anywhere">
               {children}
             </em>
           ),
@@ -119,12 +119,12 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) =
             </tr>
           ),
           th: ({ children }: ComponentProps) => (
-            <th className="px-4 py-2 text-left text-white font-semibold text-sm">
+            <th className="px-4 py-2 text-left text-white font-semibold text-sm break-words overflow-wrap-anywhere">
               {children}
             </th>
           ),
           td: ({ children }: ComponentProps) => (
-            <td className="px-4 py-2 text-gray-200 text-sm">
+            <td className="px-4 py-2 text-gray-200 text-sm break-words overflow-wrap-anywhere">
               {children}
             </td>
           ),

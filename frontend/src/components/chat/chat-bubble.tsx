@@ -29,7 +29,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
 
   if (isTyping) {
     return (
-        <div className={`w-full max-w-xs sm:max-w-md md:max-w-4xl px-2 sm:px-4 py-2 sm:py-3 rounded-2xl ${isUser ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'}`}>
+        <div className={`w-full max-w-xs sm:max-w-md md:max-w-4xl px-2 sm:px-4 py-2 sm:py-3 rounded-2xl break-words overflow-wrap-anywhere ${isUser ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-200'}`}>
             {isUser ? (
               <div className="flex items-center space-x-1">
                 <span className="w-2 h-2 bg-gray-400 rounded-full animate-pulse [animation-delay:-0.3s]"></span>
@@ -46,12 +46,12 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   }
 
   return (
-    <div className="w-full max-w-xs sm:max-w-md md:max-w-4xl">
+    <div className="w-full max-w-xs sm:max-w-md md:max-w-4xl break-words">
       {isUser ? (
         <UserMessageBubble message={message} />
       ) : (
-        <div className={`px-2 sm:px-4 py-2 sm:py-3 rounded-2xl ${bubbleClasses}`}>
-          <div className="text-xs sm:text-sm">
+        <div className={`px-2 sm:px-4 py-2 sm:py-3 rounded-2xl ${bubbleClasses} break-words overflow-wrap-anywhere`}>
+          <div className="text-xs sm:text-sm break-words overflow-wrap-anywhere">
             <MarkdownRenderer content={message} />
           </div>
           
