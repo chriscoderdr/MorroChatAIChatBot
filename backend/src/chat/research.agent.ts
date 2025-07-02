@@ -11,39 +11,105 @@ AgentRegistry.register({
     'Performs multi-step, intelligent web research to answer complex questions.',
   handle: async (input, context, callAgent) => {
     const MAX_ITERATIONS = 5;
-    const researchHistory: { query: string; results: string }[] = [];
-    let currentQuery = input;
+    const researchHistory: { query: string | object; results: string }[] = [];
+    let currentQuery: string | object = input;
     let iteration = 0;
+    let initialExclusions: string[] = [];
 
     if (!callAgent) {
       throw new Error('callAgent is not available');
     }
-    // First, get the subject context to focus the research
+
+    const llm = context.llm as ChatOpenAI;
+    if (!llm) {
+      return { output: 'Research failed: LLM not available.', confidence: 0.1 };
+    }
+    const boundLLMForJson = llm.bind({
+      response_format: { type: 'json_object' },
+    });
+
+    // Step 1: Initial query analysis to extract topic and exclusions
+    const queryAnalysisPrompt = `You are an expert at parsing user requests for research. Analyze the user's query and extract the core research topic and any domains they want to exclude.
+
+**User's Query:**
+"${input}"
+
+**Instructions:**
+Respond with a JSON object with two keys: "research_topic" and "exclude_sites".
+*   "research_topic": The core question the user is asking.
+*   "exclude_sites": An array of strings, where each string is a domain to be excluded (e.g., ["rt.com", "sputniknews.com"]). If no sites are mentioned for exclusion, provide an empty array.
+
+**JSON Response (JSON only, no other text):**`;
+
+    const queryAnalysisResult = await boundLLMForJson.invoke(
+      queryAnalysisPrompt,
+    );
+
+    try {
+      let analysisJSON = queryAnalysisResult.content.toString().trim();
+      const codeBlockMatch = analysisJSON.match(
+        /```(?:json)?\s*(\{[\s\S]*?\})\s*```/,
+      );
+      if (codeBlockMatch && codeBlockMatch[1]) {
+        analysisJSON = codeBlockMatch[1];
+      }
+      const queryAnalysis = JSON.parse(analysisJSON);
+      currentQuery = queryAnalysis.research_topic || input;
+      initialExclusions = queryAnalysis.exclude_sites || [];
+      logger.log(
+        `Initial query parsed. Topic: "${currentQuery}", Exclusions: ${JSON.stringify(
+          initialExclusions,
+        )}`,
+      );
+    } catch (e) {
+      logger.warn(
+        'Could not parse initial query analysis. Proceeding with raw input.',
+      );
+      currentQuery = input;
+    }
+
+    // Step 2: Get subject context to focus the research
     const subjectResult = await callAgent('subject_inference', input, context);
     let inferredSubject = '';
     try {
       const subjectData = JSON.parse(subjectResult.output);
       if (subjectData.subject) {
         inferredSubject = `The user is asking about "${subjectData.subject} (${subjectData.description})".`;
-        // Prepend the context to the initial query
-        currentQuery = `${subjectData.subject} ${subjectData.description} ${input}`;
-        logger.log(`Research context added. Initial query: "${currentQuery}"`);
+        if (typeof currentQuery === 'string') {
+          currentQuery = `${subjectData.subject} ${subjectData.description} ${currentQuery}`;
+          logger.log(`Research context added. New query: "${currentQuery}"`);
+        }
       }
     } catch (e) {
       logger.warn('Could not parse subject inference for research agent.');
     }
 
+    // Step 3: Combine query with initial exclusions for the first search
+    if (typeof currentQuery === 'string') {
+      currentQuery = {
+        query: currentQuery,
+        exclude_sites: initialExclusions,
+      };
+    }
+
     while (iteration < MAX_ITERATIONS) {
       iteration++;
-      logger.log(
-        `Research Iteration ${iteration}: Querying for "${currentQuery}"`,
-      );
+      const queryLog =
+        typeof currentQuery === 'string'
+          ? currentQuery
+          : JSON.stringify(currentQuery);
+      logger.log(`Research Iteration ${iteration}: Querying for "${queryLog}"`);
 
       // Execute the web search
       if (!callAgent) {
         throw new Error('callAgent is not available');
       }
-      const searchResult = await callAgent('web_search', currentQuery, context);
+      // The search input is now potentially a structured object, which needs to be stringified.
+      const searchInput =
+        typeof currentQuery === 'string'
+          ? currentQuery
+          : JSON.stringify(currentQuery);
+      const searchResult = await callAgent('web_search', searchInput, context);
       const searchOutput =
         typeof searchResult.output === 'string'
           ? searchResult.output
@@ -52,10 +118,13 @@ AgentRegistry.register({
 
       // Analyze the cumulative results and decide the next step
       const historyText = researchHistory
-        .map(
-          (item, index) =>
-            `Search #${index + 1} (Query: "${item.query}"):\n${item.results}`,
-        )
+        .map((item, index) => {
+          const queryText =
+            typeof item.query === 'string'
+              ? item.query
+              : JSON.stringify(item.query);
+          return `Search #${index + 1} (Query: "${queryText}"):\n${item.results}`;
+        })
         .join('\n\n---\n\n');
 
       const analysisPrompt = `You are a master research analyst. Your task is to analyze the provided research history and decide on the next action.
@@ -72,25 +141,21 @@ ${historyText}
 **Instructions:**
 1.  Review the entire research history to understand what has been found.
 2.  Determine if the user's question is fully and completely answered.
-3.  If the answer is complete (e.g., you have the full list of names, the specific date, etc.), your next action is "FINISH".
+3.  If the answer is complete, your next action is "FINISH".
 4.  If the answer is not yet complete, your next action is "SEARCH".
-5.  Based on your decision, respond with a JSON object with two keys: "nextAction" and "nextQueryOrFinalAnswer".
-    *   If "nextAction" is "SEARCH", then "nextQueryOrFinalAnswer" must be the specific, targeted search query to find the missing information. Be smart: if a source like Wikipedia or an official archive is mentioned, target it.
-    *   If "nextAction" is "FINISH", then "nextQueryOrFinalAnswer" must be the complete, final, conversational answer for the user, synthesized from the research history.
+5.  Based on your decision, respond with a JSON object containing the next action and its parameters.
+    *   If "nextAction" is "SEARCH", the JSON should contain:
+        *   "nextAction": "SEARCH"
+        *   "nextQueryOrFinalAnswer": A specific, targeted search query.
+        *   "exclude_sites" (optional): An array of domains to exclude from the next search if you identify low-quality or irrelevant sources (e.g., ["example.com", "another-site.org"]).
+    *   If "nextAction" is "FINISH", the JSON should contain:
+        *   "nextAction": "FINISH"
+        *   "nextQueryOrFinalAnswer": The complete, final, conversational answer. If any direct, factual answers (like unit conversions or specific numbers) were found, state them clearly. At the end, include a "## Sources" section with a markdown-formatted list of the most relevant URLs.
 6.  Provide all answers in the same language as the user's original question.
 
 **JSON Response (JSON only, no other text):**`;
 
-      const llm = context.llm as ChatOpenAI;
-      if (!llm) {
-        return {
-          output: 'Research failed: LLM not available.',
-          confidence: 0.1,
-        };
-      }
-
-      const boundLLM = llm.bind({ response_format: { type: 'json_object' } });
-      const analysisResult = await boundLLM.invoke(analysisPrompt);
+      const analysisResult = await boundLLMForJson.invoke(analysisPrompt);
 
       try {
         let analysisJSON = analysisResult.content.toString().trim();
@@ -107,7 +172,12 @@ ${historyText}
           logger.log('Research complete. Returning final answer.');
           return { output: analysis.nextQueryOrFinalAnswer, confidence: 0.98 };
         } else if (analysis.nextAction === 'SEARCH') {
-          currentQuery = analysis.nextQueryOrFinalAnswer;
+          // The next query can be a simple string or a structured object
+          // including sites to exclude.
+          currentQuery = {
+            query: analysis.nextQueryOrFinalAnswer,
+            exclude_sites: analysis.exclude_sites || [],
+          };
         } else {
           throw new Error('Invalid nextAction from analysis.');
         }
@@ -148,24 +218,15 @@ ${inferredSubject}
 ${historyText}
 
 **Instructions:**
-1.  Review the entire research history.
-2.  Synthesize the most relevant information found across all searches.
-3.  Formulate a single, clear, conversational answer for the user.
+1.  Review the entire research history to synthesize the most relevant information.
+2.  Formulate a single, clear, conversational answer for the user.
+3.  If any direct, factual answers (like unit conversions, specific numbers, or hash values) were found, state them clearly in your summary.
 4.  Acknowledge that a complete answer could not be found, but present the information you did find in a helpful way.
-5.  Do not include the raw search results or JSON in your response.
-6.  Provide the answer in the same language as the user's original question.
+5.  At the end of your answer, include a "## Sources" section with a markdown-formatted list of the most relevant URLs discovered.
+6.  Do not include raw search results or JSON in your response.
+7.  Provide the answer in the same language as the user's original question.
 
 **Final Answer:**`;
-
-    const llm = context.llm as ChatOpenAI;
-    if (!llm) {
-      // Fallback to old behavior if LLM is not available for some reason
-      const lastAnswer = researchHistory.slice(-1)[0]?.results;
-      return {
-        output: `I performed several searches but could not arrive at a definitive answer. Here is the most relevant information I found: ${lastAnswer}`,
-        confidence: 0.5,
-      };
-    }
 
     const finalSummaryResult = await llm.invoke(finalSummaryPrompt);
     const finalAnswer = finalSummaryResult.content.toString();

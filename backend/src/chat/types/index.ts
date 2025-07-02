@@ -22,7 +22,11 @@ export type AgentName =
   | 'time'
   | 'current_time'
   | 'open_weather_map'
-  | 'subject_inference';
+  | 'subject_inference'
+  | 'calculator'
+  | 'unit_converter'
+  | 'hashing'
+  | 'currency_converter';
 
 export interface AgentContext {
   sessionId: string;

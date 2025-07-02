@@ -41,6 +41,12 @@ const getAgentDescription = (agentName: string): string | undefined => {
     summarizer: 'Summarizes long pieces of text or content.',
     code_interpreter: 'Analyzes, explains, and executes code snippets.',
     code_optimization: 'Optimizes and improves existing code.',
+    calculator:
+      'Performs mathematical calculations and evaluates expressions.',
+    unit_converter: 'Converts between different units of measurement.',
+    hashing: 'Computes cryptographic hashes of text.',
+    currency_converter:
+      'Converts between different currencies and provides exchange rates.',
   };
   return descriptions[agentName];
 };
@@ -106,13 +112,17 @@ ${hasDocuments ? '\n⚠️  DOCUMENT CONTEXT DETECTED: User has uploaded documen
 ROUTING RULES (STRICT PRIORITY ORDER):
 ${chatDefaultTopic ? `1. Queries unrelated to "${chatDefaultTopic}" → general` : ''}
 2. Personal/conversational queries (greetings, introductions) → general
-3. Time queries ("time", "date", "today") → time
-4. Weather queries ("weather", "temperature") → weather
-5. Explicit document queries ("document", "what is this about") → document_search
-6. Research queries (companies, people, facts) → research
-7. Code queries → code_interpreter
-8. Ambiguous queries WITH document context → document_search
-9. Everything else → general
+3. Calculation queries ("calculate", "what is 2+2") → calculator
+4. Currency conversion queries ("USD to EUR", "100 dollars in yen") → currency_converter
+5. Unit conversion queries ("convert", "kg to lb") → unit_converter
+6. Hashing queries ("hash", "sha256 of 'hello'") → hashing
+7. Time queries ("time", "date", "today") → time
+8. Weather queries ("weather", "temperature") → weather
+9. Explicit document queries ("document", "what is this about") → document_search
+10. Research queries (companies, people, facts) → research
+11. Code queries → code_interpreter
+12. Ambiguous queries WITH document context → document_search
+13. Everything else → general
 
 MANDATORY RESPONSE FORMAT - RESPOND WITH ONLY THIS JSON:
 {"agentName": "agent_name", "confidence": 0.85, "reasoning": "brief reason"}
