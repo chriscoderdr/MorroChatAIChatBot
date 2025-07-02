@@ -20,12 +20,14 @@ import { ChatUploadController } from './controllers/chat-upload.controller';
 import { PdfVectorService } from './services/pdf-vector.service';
 import { PdfRetrievalService } from './services/pdf-retrieval.service';
 import { ChromaService } from './services/chroma.service';
+import { LlmModule } from '../llm/llm.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: ChatSession.name, schema: ChatSessionSchema },
     ]),
+    LlmModule,
   ],
   controllers: [ChatController, ChatUploadController],
   providers: [

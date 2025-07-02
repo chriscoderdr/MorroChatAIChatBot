@@ -3,8 +3,6 @@ import { z } from 'zod';
 import { TavilySearch } from '@langchain/tavily';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
-import { ChatOpenAI } from '@langchain/openai';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import {
   RunnableLambda,
@@ -18,6 +16,7 @@ import { ChatSession } from '../schemas/chat-session.schema';
 import { Model } from 'mongoose';
 import { BaseMessage } from '@langchain/core/messages';
 import { AgentOrchestrator } from '../agent-orchestrator';
+import { LlmService } from '../../llm/llm.service';
 
 @Injectable()
 export class LangChainService {
@@ -26,6 +25,7 @@ export class LangChainService {
   constructor(
     private readonly configService: ConfigService,
     @InjectModel(ChatSession.name) private chatSessionModel: Model<ChatSession>,
+    private readonly llmService: LlmService,
   ) {
     this.logger.log(
       'Initializing LangChainService with AgentOrchestrator for agent routing.',
@@ -44,21 +44,7 @@ export class LangChainService {
   async createLangChainApp(topic?: string) {
     this.logger.log('Creating LangChain app and initializing tools...');
 
-    const provider = this.configService.get<string>('ai.provider') || 'gemini';
-    let llm: BaseChatModel;
-    if (provider === 'openai') {
-      llm = new ChatOpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
-        modelName: process.env.OPENAI_MODEL || 'gpt-4o',
-        temperature: 0,
-      });
-    } else {
-      llm = new ChatGoogleGenerativeAI({
-        apiKey: process.env.GEMINI_API_KEY,
-        model: process.env.GEMINI_MODEL || 'gemini-1.5-flash',
-        temperature: 0,
-      });
-    }
+    const llm = this.llmService.getLlm();
 
     const searchTool = new DynamicStructuredTool({
       name: 'web_search',
@@ -186,6 +172,17 @@ export class LangChainService {
         description: openWeatherMapTool.description,
         handle: async (input, _context) => ({
           output: await openWeatherMapTool.func({ location: input }),
+          confidence: 0.95,
+        }),
+      });
+    }
+
+    if (!AgentRegistry.getAgent('time')) {
+      AgentRegistry.register({
+        name: 'time',
+        description: currentTimeTool.description,
+        handle: async (input, _context) => ({
+          output: await currentTimeTool.func({ timezone: input }),
           confidence: 0.95,
         }),
       });

@@ -15,6 +15,10 @@ export class AgentRegistry {
     return Array.from(this.agents.values());
   }
 
+  static clear() {
+    this.agents.clear();
+  }
+
   // Utility for agent chaining: call another agent by name
   static async callAgent(
     name: AgentName,
