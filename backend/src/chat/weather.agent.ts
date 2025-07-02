@@ -55,13 +55,29 @@ Location(s):`;
         );
         
         const combinedOutput = weatherResults.map(res => res.output).join('\n\n');
-        const isSpanish = input.toLowerCase().includes('compara') || input.toLowerCase().includes('clima');
-        const finalOutput = isSpanish ? `Comparación del clima:\n\n${combinedOutput}` : `Weather comparison:\n\n${combinedOutput}`;
+        
+        const comparisonPrompt = `You are a weather analyst. The user asked to compare the weather in multiple locations. Your task is to present the comparison in a clear, conversational way, using the same language as the user's original query.
+
+USER'S QUERY: "${input}"
+
+WEATHER DATA:
+${combinedOutput}
+
+INSTRUCTIONS:
+1.  Analyze the user's query to understand the language used.
+2.  Present the weather data comparison in a user-friendly format.
+3.  Your entire response should be in the same language as the user's query. For example, if the user asked in Spanish, you must respond in Spanish.
+
+COMPARISON:`;
+
+        // Use the summarizer agent to generate a language-aware response
+        const finalResult = await callAgent('summarizer', comparisonPrompt, context);
 
         return {
-          output: finalOutput,
+          output: finalResult.output,
           confidence: 0.9
         };
+
       } else {
         // Handle single location
         const result = await callAgent('open_weather_map', locations[0], context);

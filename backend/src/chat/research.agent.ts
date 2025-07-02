@@ -6,162 +6,88 @@ AgentRegistry.register({
   description: "Performs comprehensive web research using LLM intelligence to extract information and make follow-up searches when needed.",
   handle: async (input, context, callAgent) => {
     try {
-      let searchQuery = input;
-      
-      // Always try to infer the subject and its context from the conversation history
-      const subjectResult = await callAgent("subject_inference", input, context);
-      let inferredSubject = '';
-      let inferredDescription = '';
-
+      // Step 1: Get a research plan
+      const planResult = await callAgent("planning", input, context);
+      let plan: string[] = [];
       try {
-        const subjectData = JSON.parse(subjectResult.output);
-        inferredSubject = subjectData.subject || '';
-        inferredDescription = subjectData.description || '';
+        plan = JSON.parse(planResult.output);
       } catch (e) {
-        console.warn("Could not parse subject inference JSON:", subjectResult.output);
+        console.error("Failed to parse research plan:", planResult.output);
+        return { output: "I'm having trouble creating a research plan.", confidence: 0.2 };
       }
 
-      if (inferredSubject) {
-        console.log(`Inferred subject: "${inferredSubject}", Description: "${inferredDescription}"`);
-        // Construct a more specific search query using the full context
-        searchQuery = `${inferredSubject} ${inferredDescription} ${input}`;
-        console.log(`Subject inference added context. New query: "${searchQuery}"`);
-      }
-      
-      // Step 1: Initial web search
-      const searchResult = await callAgent("web_search", searchQuery, context);
-      
-      const searchOutput = typeof searchResult.output === 'string' 
-        ? searchResult.output 
-        : JSON.stringify(searchResult.output || '');
-      
-      if (!searchOutput || searchOutput.includes("Search failed") || searchOutput.trim().length < 10) {
-        return {
-          output: "I couldn't find reliable information about your question. Please try rephrasing or being more specific.",
-          confidence: 0.2
-        };
+      if (!plan || plan.length === 0) {
+        return { output: "I couldn't create a research plan for your request.", confidence: 0.3 };
       }
 
-      // Step 2: Use LLM intelligence to extract and analyze information
-      const analysisPrompt = `You are an expert research analyst. Your task is to analyze search results and extract relevant information to answer the user's question. If the information is incomplete, determine if a follow-up search is needed.
-${inferredSubject ? `\nCRITICAL CONTEXT: The user is asking about "${inferredSubject} (${inferredDescription})". Prioritize information related to this specific entity.` : ''}
+      // Step 2: Execute plan and re-evaluate at each step
+      const researchHistory: { query: string, results: string }[] = [];
+      let finalAnswer = "I was unable to find the information after several attempts.";
+      let answerFound = false;
 
-USER'S QUESTION: ${input}
+      for (const query of plan) {
+        if (answerFound) break;
 
-SEARCH RESULTS: 
-${searchOutput}
+        console.log(`Executing research step: "${query}"`);
+        const searchResult = await callAgent("web_search", query, context);
+        const searchOutput = typeof searchResult.output === 'string' ? searchResult.output : JSON.stringify(searchResult.output || '');
+        researchHistory.push({ query, results: searchOutput });
 
-INSTRUCTIONS:
-1. Carefully analyze the search results to find information that directly answers the user's question.
-2. Extract specific facts, names, dates, and relevant details.
-3. If the search results contain sufficient information to answer the question completely, provide a clear, conversational answer in the same language as the user's question.
-4. If the information is incomplete or you need more specific details, indicate what additional search would be helpful by starting your response with "NEED_MORE_SEARCH: [specific search query]" followed by your partial answer.
-5. Focus only on factual information from the search results. Do not make assumptions.
-6. Provide natural, conversational responses without technical metadata.
-7. DO NOT include any of the following in your response:
-   - "THOUGHT:" sections
-   - "ACTION:" sections 
-   - "OBSERVATION:" sections
-   - References to "web_search" or any technical tool details
-   - Phrases like "According to the search results" or "The information shows"
-8. Your answer should read as if you're directly answering the user with the information you found.
-9. MOST IMPORTANT: Provide ONLY your final answer. Do not include any of your thinking process.
+        const historyText = researchHistory.map((item, index) => `Search #${index + 1} (Query: "${item.query}"):\n${item.results}`).join('\n\n');
 
-RESPONSE:`;
+        const analysisPrompt = `You are an expert research analyst. Your goal is to determine if the user's question can be answered from the research so far.
 
-      // Call the summarizer with the analysis prompt - it will use LLM intelligence
-      const analysisResult = await callAgent("summarizer", analysisPrompt, context);
-      
-      // Check if the LLM determined we need more specific information
-      if (analysisResult.output.includes("NEED_MORE_SEARCH:")) {
-        const lines = analysisResult.output.split('\n');
-        const searchLine = lines.find(line => line.includes("NEED_MORE_SEARCH:"));
+**User's Original Question:**
+"${input}"
+
+**Full Search History:**
+${historyText}
+
+**Instructions:**
+1.  Review the search history to see if you have a complete answer to the user's question.
+2.  If you have the complete answer (e.g., a full list of names, a specific date), set "answerFound" to true.
+3.  The "answer" field should contain the most complete answer you can give right now, even if it's partial.
+4.  Respond in JSON format only.
+
+**JSON Response Format:**
+{
+  "answerFound": boolean,
+  "answer": "The answer so far...",
+  "reasoning": "Briefly explain why the answer is complete or what is still missing."
+}
+
+**JSON Response:**`;
+
+        const analysisResult = await callAgent("summarizer", analysisPrompt, context);
         
-        if (searchLine) {
-          const additionalQuery = searchLine.replace("NEED_MORE_SEARCH:", "").trim();
-          
-          if (additionalQuery && additionalQuery.length > 3) {
-            // Recursive call: search for more specific information
-            const additionalSearchResult = await callAgent("web_search", additionalQuery, context);
-            
-            // Safely handle the additionalSearchResult.output
-            const additionalOutput = typeof additionalSearchResult.output === 'string'
-              ? additionalSearchResult.output
-              : JSON.stringify(additionalSearchResult.output || '');
-              
-            if (additionalOutput && !additionalOutput.includes("Search failed") && additionalOutput.trim().length > 10) {
-              // Combine both search results and re-analyze
-              const combinedPrompt = `You are an expert research analyst. Analyze the combined search results to provide a comprehensive answer.
-${inferredSubject ? `\nCRITICAL CONTEXT: The user is asking about "${inferredSubject} (${inferredDescription})". Prioritize information related to this specific entity.` : ''}
-
-USER'S QUESTION: ${input}
-
-INITIAL SEARCH RESULTS: 
-${searchOutput}
-
-ADDITIONAL SEARCH RESULTS:
-${additionalOutput}
-
-INSTRUCTIONS:
-1. Combine information from both search results to provide a complete answer.
-2. Extract specific facts, names, dates, and relevant details.
-3. Provide a clear, conversational answer in the same language as the user's question.
-4. Focus only on factual information from the search results.
-5. Do not include "NEED_MORE_SEARCH" in your response - provide the final answer.
-6. DO NOT include any of the following in your response:
-   - "THOUGHT:" sections
-   - "ACTION:" sections 
-   - "OBSERVATION:" sections
-   - References to "web_search" or any technical tool details
-   - Phrases like "According to the search results" or "The information shows"
-7. Your answer should read as if you're directly answering the user with the information you found.
-8. MOST IMPORTANT: Provide ONLY your final answer. Do not show your thinking process.
-9. Your final answer must be in the same language as the user's question.
-
-RESPONSE:`;
-
-              const finalAnalysisResult = await callAgent("summarizer", combinedPrompt, context);
-              
-              return {
-                output: finalAnalysisResult.output.replace(/NEED_MORE_SEARCH:.*$/gm, '').trim(),
-                confidence: Math.min(0.95, (searchResult.confidence ?? 0.7) + 0.2)
-              };
-            }
+        try {
+          let analysisJSON = analysisResult.output;
+          const codeBlockMatch = analysisJSON.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+          if (codeBlockMatch && codeBlockMatch[1]) {
+            analysisJSON = codeBlockMatch[1];
           }
+          
+          const analysis = JSON.parse(analysisJSON);
+          finalAnswer = analysis.answer;
+          if (analysis.answerFound) {
+            answerFound = true;
+          }
+          console.log(`Research step analysis: ${analysis.reasoning}`);
+        } catch (e) {
+          console.error("Failed to parse analysis JSON:", analysisResult.output);
+          // If parsing fails, assume it's a partial answer and continue
+          finalAnswer = analysisResult.output;
         }
       }
-      
-      // Clean up the response to ensure it's user-friendly
-      let cleanOutput = analysisResult.output
-        // Remove the NEED_MORE_SEARCH directive if present
-        .replace(/NEED_MORE_SEARCH:.*$/gm, '')
-        // First, extract just the FINAL ANSWER section if it exists
-        .replace(/^[\s\S]*?FINAL ANSWER:\s*([\s\S]*)$/i, '$1')
-        // Then remove any remaining agent internal monologue
-        .replace(/^THOUGHT:.*?(?=ACTION:|OBSERVATION:|FINAL ANSWER:|$)/gsm, '')
-        .replace(/^ACTION:.*?(?=OBSERVATION:|THOUGHT:|FINAL ANSWER:|$)/gsm, '')
-        .replace(/^OBSERVATION:.*?(?=ACTION:|THOUGHT:|FINAL ANSWER:|$)/gsm, '')
-        .replace(/^Executing web_search.*?(?=\n|$)/gmi, '')
-        .replace(/^I'll search for.*?(?=\n|$)/gmi, '')
-        .replace(/^I need to search.*?(?=\n|$)/gmi, '')
-        .replace(/THOUGHT:/gi, '')
-        .replace(/ACTION:/gi, '')
-        .replace(/OBSERVATION:/gi, '')
-        .replace(/According to the search results,?\s*/gi, '')
-        .replace(/Based on the search results,?\s*/gi, '')
-        .replace(/The search results indicate,?\s*/gi, '')
-        .replace(/From the information provided,?\s*/gi, '')
-        .trim();
-      
-      // Return the clean response
+
       return {
-        output: cleanOutput,
-        confidence: searchResult.confidence ?? 0.7
+        output: finalAnswer,
+        confidence: answerFound ? 0.98 : 0.5
       };
       
     } catch (error) {
       return {
-        output: `Sorry, I couldn't complete the search: ${error.message}. Please try again with a different question.`,
+        output: `Sorry, I couldn't complete the research: ${error.message}.`,
         confidence: 0.1
       };
     }

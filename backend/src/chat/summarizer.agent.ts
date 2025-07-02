@@ -14,21 +14,11 @@ TEXT TO ANALYZE:
 ${input}
 
 INSTRUCTIONS:
-1. If this is a research analysis prompt (contains "USER'S QUESTION", "SEARCH RESULTS", etc.), follow those specific instructions exactly.
-2. If this is a general summarization request, provide a clear, concise summary that captures the key information.
-3. Maintain the appropriate language (Spanish/English) based on the context and user's language.
-4. Focus on factual information and avoid speculation.
-5. Provide natural, conversational responses without technical metadata or formatting artifacts.
-6. If analyzing search results for a specific question, extract only the information that directly answers that question.
-7. If the search results don't contain sufficient information to answer the question completely, start your response with "NEED_MORE_SEARCH: [specific search query]" followed by your partial answer.
-8. CRITICAL: Your response must NEVER include any of the following:
-   - "THOUGHT:" sections or your internal thinking process
-   - "ACTION:" sections or what actions you're taking
-   - "OBSERVATION:" sections or what you're noticing
-   - References to "web_search" or any technical tool details
-   - Phrases like "According to the search results" or "The information shows"
-9. MOST IMPORTANT: Only include your FINAL ANSWER, not your reasoning process.
-10. The final output should be a clean, human-like response as if directly answering the user.
+1.  If the text is a research analysis prompt (it will contain "USER'S QUESTION" and "SEARCH HISTORY"), follow the specific instructions within that prompt *exactly*. Your response should be either "ANSWER_FOUND: [answer]" or "NEED_MORE_SEARCH: [new query]".
+2.  For all other text, provide a clear and concise summary that captures the key information.
+3.  Maintain the appropriate language (e.g., Spanish, English) based on the text.
+4.  Focus on factual information and avoid speculation.
+5.  Do not include technical metadata or your own thinking process in the final output.
 
 Provide your analysis or summary:`;
 
@@ -100,50 +90,10 @@ Provide your analysis or summary:`;
         // Continue to fallback pattern matching
       }
       
-      // Pattern matching fallback if LLM methods failed
-      if (input.includes("USER'S QUESTION") && input.includes("SEARCH RESULTS")) {
-        // Extract the user's question and search results
-        const questionMatch = input.match(/USER'S QUESTION:\s*(.*?)\n/);
-        const resultsMatch = input.match(/SEARCH RESULTS:\s*(.*?)(?=\n\nINSTRUCTIONS:)/s);
-        
-        if (questionMatch && resultsMatch) {
-          const question = questionMatch[1].trim();
-          const searchResults = resultsMatch[1].trim();
-          
-          // Simple extraction logic for common patterns
-          const isSpanish = /quién|quien|cuándo|cuando|qué|que|año|empresa|fundó|creó/.test(question.toLowerCase());
-          
-          // Look for founding dates, names, and relevant information in the search results
-          const foundingYearMatch = searchResults.match(/\b(19\d{2}|20\d{2})\b/);
-          const nameMatches = searchResults.match(/\b[A-ZÁÉÍÓÚ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚ][a-záéíóúñ]+)*\b/g);
-          
-          if (question.toLowerCase().includes('fundó') || question.toLowerCase().includes('founded')) {
-            if (foundingYearMatch) {
-              const year = foundingYearMatch[0];
-              return {
-                output: isSpanish 
-                  ? `Según la información encontrada, fue fundada en ${year}.`
-                  : `According to the information found, it was founded in ${year}.`,
-                confidence: 0.8
-              };
-            }
-          }
-          
-          // If we can't extract specific information, indicate we need more search
-          return {
-            output: `NEED_MORE_SEARCH: ${question} específicos detalles`,
-            confidence: 0.6
-          };
-        }
-      }
-      
-      // For general summarization, provide a simple summary based on rules
-      const sentences = input.split(/[.!?]+/).filter(s => s.trim().length > 10).slice(0, 5);
-      const basicSummary = sentences.join('. ');
-      
+      // If LLM methods fail, return a generic error instead of using a brittle fallback.
       return {
-        output: basicSummary.length > 300 ? basicSummary.substring(0, 300) + '...' : basicSummary,
-        confidence: 0.7
+        output: "I am having trouble analyzing this text right now. Please try again later.",
+        confidence: 0.1
       };
     } catch (error) {
       console.error("Summarizer agent error:", error);

@@ -6,35 +6,6 @@ import { Logger } from "@nestjs/common";
 
 const logger = new Logger('DocumentSearchAgent');
 
-// Helper function to extract keywords from a question for better search recall
-const extractQuestionKeywords = (question: string): string[] => {
-  const questionLower = question.toLowerCase();
-  const keywords: string[] = [];
-  
-  // Add specific references like "Article 5"
-  const articleRefs = questionLower.match(/artículo\s+\d+|article\s+\d+/g);
-  if (articleRefs) {
-    keywords.push(...articleRefs);
-  }
-  
-  // Add important words, filtering out common stop words
-  const importantWords = questionLower
-    .replace(/[^\w\s]/g, ' ')
-    .split(/\s+/)
-    .filter(word => 
-      word.length > 3 && 
-      !['what', 'como', 'donde', 'cuando', 'porque', 'cual', 'quien', 'dice', 'trata', 'contiene', 'sobre', 'acerca', 'este', 'archivo'].includes(word)
-    );
-  keywords.push(...importantWords);
-  
-  // Add high-value terms if present
-  if (questionLower.includes('constitución') || questionLower.includes('constitution')) {
-    keywords.push('constitución', 'constitution');
-  }
-  
-  return [...new Set(keywords)]; // Return unique keywords
-};
-
 AgentRegistry.register({
   name: "document_search",
   description: "Searches through user-uploaded documents to find specific information and provide a summarized answer.",

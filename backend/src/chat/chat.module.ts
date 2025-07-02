@@ -8,6 +8,7 @@ import "./routing.agent";
 import "./subject-inference.agent";
 import "./document-search.agent";
 import "./general.agent";
+import "./planning.agent";
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { LangChainService } from './services/langchain.service';
