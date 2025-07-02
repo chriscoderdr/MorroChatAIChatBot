@@ -24,16 +24,41 @@ AgentRegistry.register({
         };
       }
 
+      // Step 1: Use subject_inference to get context from the conversation
+      let inferredSubject = '';
+      if (callAgent) {
+        try {
+          const subjectResult = await callAgent(
+            'subject_inference',
+            input,
+            context,
+          );
+          const subjectData = JSON.parse(subjectResult.output);
+          if (subjectData.subject) {
+            inferredSubject = `${subjectData.subject}, ${subjectData.description}`;
+            logger.log(`Inferred subject: ${inferredSubject}`);
+          }
+        } catch (e) {
+          logger.warn('Could not parse subject inference for time agent.');
+        }
+      }
+
+      // Step 2: Create a combined input for location extraction
+      const combinedInput = inferredSubject
+        ? `${input} (context: ${inferredSubject})`
+        : input;
+
       const extractionPrompt = `
-You are a location extraction expert. Your task is to extract up to two location names from a user's query.
+You are a location extraction expert. Your task is to extract up to two location names from the user's query, using the provided context if available.
 
 RULES:
-1.  **Extract Locations**: Identify and extract the city and country (e.g., "Santo Domingo, DO", "New York, US").
-2.  **Handle Comparisons**: If the query compares two locations (e.g., "time in Santo Domingo vs New York"), separate them with " | ".
-3.  **Focus on Location**: Return ONLY the location name(s). Remove all other words, questions, and conversational text.
-4.  **Be Concise**: Do not add any extra text, explanations, or apologies.
+1.  **Analyze Query and Context**: Identify all unique location names from the user's query and the context.
+2.  **Handle Comparisons**: If the query is a comparison, ensure both locations (from the query and the context) are extracted.
+3.  **Output Format**: If there are two locations, separate them with " | ".
+4.  **Focus on Location**: Return ONLY the location name(s) (e.g., "Santo Domingo, DO | Manila, PH"). Remove all other words.
+5.  **Be Concise**: Do not add any extra text, explanations, or apologies.
 
-Query: "${input}"
+USER'S QUERY WITH CONTEXT: "${combinedInput}"
 Location(s):
 `;
       const extractionResult = await llm.invoke(extractionPrompt);
@@ -102,6 +127,7 @@ INSTRUCTIONS:
 1.  Analyze the user's query to understand the language used.
 2.  Present the time data comparison in a user-friendly format.
 3.  Your entire response should be in the same language as the user's query. For example, if the user asked in Spanish, you must respond in Spanish.
+4.  Format the response using markdown for a clear and user-friendly presentation. Use headings, bold text, and lists.
 
 COMPARISON:`;
 
@@ -166,6 +192,7 @@ INSTRUCTIONS:
 1.  Analyze the user's query to understand the language used.
 2.  Present the time data in a user-friendly format.
 3.  Your entire response should be in the same language as the user's query. For example, if the user asked in Spanish, you must respond in Spanish.
+4.  Format the response using markdown for a clear and user-friendly presentation. Use headings, bold text, and lists.
 
 RESPONSE:`;
 
@@ -182,6 +209,27 @@ RESPONSE:`;
       }
     } catch (error: any) {
       logger.error(`Error in time agent: ${error.message}`, error.stack);
+      // Ensure even errors are summarized for consistent output
+      if (callAgent) {
+        const errorPrompt = `You are a helpful assistant. The user's request for time information failed. Please inform them gracefully in the same language as their original query.
+
+USER'S QUERY: "${input}"
+ERROR: "I'm sorry, I couldn't get the time information. Please try again with a specific location."
+
+INSTRUCTIONS:
+1.  Analyze the user's query to understand the language used.
+2.  Apologize for the error and explain that the time information could not be retrieved.
+3.  Suggest trying again with a specific location.
+4.  Your entire response should be in the same language as the user's query.
+
+RESPONSE:`;
+        const finalResult = await callAgent('summarizer', errorPrompt, context);
+        return {
+          output: finalResult.output,
+          confidence: 0.2,
+        };
+      }
+      // Fallback if callAgent is not available
       return {
         output: `I'm sorry, I couldn't get the time information. Please try again with a valid IANA timezone.`,
         confidence: 0.2,

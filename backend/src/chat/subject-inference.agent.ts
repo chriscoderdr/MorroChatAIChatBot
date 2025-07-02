@@ -48,7 +48,12 @@ AgentRegistry.register({
 *   User's latest message: "When was it founded?"
 *   Correct JSON Response: {"subject": "GBH", "description": "Dominican software company"}
 
-**Example 2 (New Topic / Direct Question):**
+**Example 2 (Time Comparison):**
+*   History: "human: que hora es en dominicana?"
+*   User's latest message: "y en filipinas?"
+*   Correct JSON Response: {"subject": "Dominican Republic", "description": "location for time comparison"}
+
+**Example 3 (New Topic / Direct Question):**
 *   History: "human: Tell me about this Python code..."
 *   User's latest message: "hablas español?"
 *   Correct JSON Response: {}
