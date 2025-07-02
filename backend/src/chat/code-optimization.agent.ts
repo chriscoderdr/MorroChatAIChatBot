@@ -1,74 +1,11 @@
 // code-optimization.agent.ts
 import { AgentRegistry } from './agent-registry';
 
-AgentRegistry.register({
-  name: 'code_optimization',
-  description:
-    'Specialized agent for analyzing and optimizing code performance, suggesting improvements and best practices.',
-  async handle(input) {
-    try {
-      // Extract code blocks from input
-      const codeBlockRegex = /```(?:[\w]*\n)?([\s\S]*?)```/g;
-      const codeBlocks: string[] = [];
-      let match;
-
-      while ((match = codeBlockRegex.exec(input)) !== null) {
-        codeBlocks.push(match[1].trim());
-      }
-
-      if (codeBlocks.length === 0) {
-        return {
-          output:
-            'No code blocks found. Please provide code using triple backticks (```) format for optimization analysis.',
-          confidence: 0.2,
-        };
-      }
-
-      // Analyze the code for optimization opportunities
-      const code = codeBlocks[0]; // Focus on first code block
-      const analysis = analyzeCodeForOptimization(code);
-
-      // Generate optimized version if possible
-      const optimizedCode = generateOptimizedCode(code);
-
-      let output = `## Code Optimization Analysis\n\n`;
-
-      // Original code analysis
-      output += `**Original Code Issues:**\n`;
-      analysis.issues.forEach((issue) => {
-        output += `- ${issue}\n`;
-      });
-
-      output += `\n**Performance Impact:** ${analysis.performanceImpact}\n\n`;
-
-      // Optimized version
-      if (optimizedCode) {
-        output += `**Optimized Version:**\n\`\`\`javascript\n${optimizedCode}\n\`\`\`\n\n`;
-        output += `**Optimization Techniques Used:**\n`;
-        analysis.optimizations.forEach((opt) => {
-          output += `- ${opt}\n`;
-        });
-        output += `\n**Expected Performance Improvement:** ${analysis.expectedImprovement}\n\n`;
-      }
-
-      // Additional recommendations
-      output += `**Additional Recommendations:**\n`;
-      analysis.recommendations.forEach((rec) => {
-        output += `- ${rec}\n`;
-      });
-
-      return {
-        output: output,
-        confidence: 0.9,
-      };
-    } catch (error: any) {
-      return {
-        output: `Code optimization analysis failed: ${error.message}`,
-        confidence: 0.1,
-      };
-    }
-  },
-});
+const detectLanguage = async (text: string, llm: any): Promise<string> => {
+  const prompt = `Detect the language of this text. Respond with only the language name (e.g., "Spanish", "English").\n\nText: "${text}"`;
+  const result = await llm.invoke(prompt);
+  return typeof result.content === 'string' ? result.content.trim() : 'English';
+};
 
 // Helper functions for code analysis
 function analyzeCodeForOptimization(code: string) {
@@ -174,3 +111,114 @@ function superOptimized() {
 
   return null;
 }
+
+AgentRegistry.register({
+  name: 'code_optimization',
+  description:
+    'Specialized agent for analyzing and optimizing code performance, suggesting improvements and best practices.',
+  async handle(input, context) {
+    try {
+      // Extract code blocks from input
+      const codeBlockRegex = /```(?:[\w]*\n)?([\s\S]*?)```/g;
+      let codeBlocks: string[] = [];
+      let match;
+
+      while ((match = codeBlockRegex.exec(input)) !== null) {
+        codeBlocks.push(match[1].trim());
+      }
+
+      if (codeBlocks.length === 0) {
+        // If no code in current input, check history
+        if (context.chatHistory && context.chatHistory.length > 0) {
+          for (let i = context.chatHistory.length - 1; i >= 0; i--) {
+            const historyInput = context.chatHistory[i].content;
+            if (typeof historyInput === 'string') {
+              while ((match = codeBlockRegex.exec(historyInput)) !== null) {
+                codeBlocks.push(match[1].trim());
+              }
+              if (codeBlocks.length > 0) {
+                break; // Found code in history
+              }
+            }
+          }
+        }
+      }
+
+      if (codeBlocks.length === 0) {
+        return {
+          output:
+            'No code blocks found in your input or recent history. Please provide code using triple backticks (```) format for optimization analysis.',
+          confidence: 0.2,
+        };
+      }
+
+      if (!context.llm) {
+        return {
+          output: "I'm sorry, I can't process this request without my core AI module.",
+          confidence: 0.1,
+        };
+      }
+
+      // Analyze the code for optimization opportunities
+      const code = codeBlocks[0]; // Focus on first code block
+      const analysis = analyzeCodeForOptimization(code);
+
+      // Generate optimized version if possible
+      const optimizedCode = generateOptimizedCode(code);
+
+      const question = input.replace(/```[\s\S]*?```/g, '').trim();
+      const questionLanguage = await detectLanguage(question, context.llm);
+
+      const synthesisPrompt = `You are an expert code optimization assistant. A user has provided code and is asking for optimizations. Your response must be entirely in ${questionLanguage}.
+
+**Your response must be entirely in ${questionLanguage}.** This includes all headers and explanatory text.
+
+**User's Question:**
+${question}
+
+**Provided Code:**
+\`\`\`
+${code}
+\`\`\`
+
+**Code Analysis:**
+- Issues: ${analysis.issues.join(', ')}
+- Performance Impact: ${analysis.performanceImpact}
+
+**Optimized Code:**
+\`\`\`javascript
+${optimizedCode}
+\`\`\`
+
+**Optimization Techniques Used:**
+- ${analysis.optimizations.join('\n- ')}
+
+**Expected Performance Improvement:**
+- ${analysis.expectedImprovement}
+
+**Additional Recommendations:**
+- ${analysis.recommendations.join('\n- ')}
+
+**Response Structure:**
+1.  Start with a "Code Optimization Analysis" section (in ${questionLanguage}).
+2.  Include subsections for Original Code Issues, Performance Impact, Optimized Version, Optimization Techniques Used, Expected Performance Improvement, and Additional Recommendations (all in ${questionLanguage}).
+3.  Provide a comprehensive explanation of the analysis and the optimized code in a helpful, conversational tone.
+
+Please generate the complete response now.`;
+
+      const llmResult = await context.llm.invoke(synthesisPrompt);
+      const output =
+        typeof llmResult.content === 'string' ? llmResult.content : '';
+
+      return {
+        output: output,
+        confidence: 0.9,
+      };
+    } catch (error: any) {
+      return {
+        output: `Code optimization analysis failed: ${error.message}`,
+        confidence: 0.1,
+      };
+    }
+  },
+});

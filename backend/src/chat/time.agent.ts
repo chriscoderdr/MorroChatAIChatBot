@@ -25,25 +25,26 @@ AgentRegistry.register({
       }
 
       const extractionPrompt = `
-You are a location extraction expert. Your task is to extract a location from a user's query.
+You are a location extraction expert. Your task is to extract up to two location names from a user's query.
 
 RULES:
-1.  **Extract Location**: Identify and extract the city and country (e.g., "Santo Domingo, DO", "New York, US").
-2.  **Focus on Location**: Return ONLY the location name. Remove all other words, questions, and conversational text.
-3.  **Be Concise**: Do not add any extra text, explanations, or apologies.
+1.  **Extract Locations**: Identify and extract the city and country (e.g., "Santo Domingo, DO", "New York, US").
+2.  **Handle Comparisons**: If the query compares two locations (e.g., "time in Santo Domingo vs New York"), separate them with " | ".
+3.  **Focus on Location**: Return ONLY the location name(s). Remove all other words, questions, and conversational text.
+4.  **Be Concise**: Do not add any extra text, explanations, or apologies.
 
 Query: "${input}"
-Location:
+Location(s):
 `;
       const extractionResult = await llm.invoke(extractionPrompt);
-      const locationString =
+      const locationsString =
         typeof extractionResult.content === 'string'
           ? extractionResult.content.trim()
           : JSON.stringify(extractionResult.content).trim();
 
-      logger.log(`Extracted location with LLM: "${locationString}"`);
+      logger.log(`Extracted locations with LLM: "${locationsString}"`);
 
-      if (!locationString) {
+      if (!locationsString) {
         return {
           output:
             "I couldn't identify a location in your request. Please specify a city, like 'time in London'.",
@@ -51,7 +52,16 @@ Location:
         };
       }
 
-      const timezonePrompt = `
+      const locations = locationsString.split(' | ').map((loc) => loc.trim());
+
+      if (locations.length > 1) {
+        if (!callAgent) {
+          throw new Error('callAgent is not available');
+        }
+        // Handle multiple locations
+        const timeResults = await Promise.all(
+          locations.map(async (location) => {
+            const timezonePrompt = `
 You are a timezone expert. Your task is to find the IANA timezone for a given location.
 
 RULES:
@@ -59,37 +69,93 @@ RULES:
 2.  **Focus on Timezone**: Return ONLY the IANA timezone name.
 3.  **Be Concise**: Do not add any extra text, explanations, or apologies.
 
-Location: "${locationString}"
+Location: "${location}"
 Timezone:
 `;
-      const timezoneResult = await llm.invoke(timezonePrompt);
-      const timezoneString =
-        typeof timezoneResult.content === 'string'
-          ? timezoneResult.content.trim()
-          : JSON.stringify(timezoneResult.content).trim();
+            const timezoneResult = await llm.invoke(timezonePrompt);
+            const timezoneString =
+              typeof timezoneResult.content === 'string'
+                ? timezoneResult.content.trim()
+                : JSON.stringify(timezoneResult.content).trim();
 
-      logger.log(`Extracted timezone with LLM: "${timezoneString}"`);
+            if (!timezoneString) {
+              return {
+                output: `Could not determine timezone for ${location}`,
+              };
+            }
+            return callAgent('current_time', timezoneString, context);
+          }),
+        );
 
-      if (!timezoneString) {
+        const combinedOutput = timeResults
+          .map((res) => res.output)
+          .join('\n\n');
+
+        const comparisonPrompt = `You are a time analyst. The user asked to compare the time in multiple locations. Your task is to present the comparison in a clear, conversational way, using the same language as the user's original query.
+
+USER'S QUERY: "${input}"
+
+TIME DATA:
+${combinedOutput}
+
+INSTRUCTIONS:
+1.  Analyze the user's query to understand the language used.
+2.  Present the time data comparison in a user-friendly format.
+3.  Your entire response should be in the same language as the user's query. For example, if the user asked in Spanish, you must respond in Spanish.
+
+COMPARISON:`;
+
+        // Use the summarizer agent to generate a language-aware response
+        if (!callAgent) {
+          throw new Error('callAgent is not available');
+        }
+        const finalResult = await callAgent(
+          'summarizer',
+          comparisonPrompt,
+          context,
+        );
+
         return {
-          output:
-            `I couldn't determine the timezone for "${locationString}". Please try a different location.`,
-          confidence: 0.4,
+          output: finalResult.output,
+          confidence: 0.9,
         };
-      }
+      } else {
+        if (!callAgent) {
+          throw new Error('callAgent is not available');
+        }
+        // Handle single location
+        const timezonePrompt = `
+You are a timezone expert. Your task is to find the IANA timezone for a given location.
 
-      if (!callAgent) {
-        throw new Error('callAgent is not available');
-      }
-      
-      // Handle single location
-      const result = await callAgent(
-        'current_time',
-        timezoneString,
-        context,
-      );
-      
-      const summarizerPrompt = `You are a time analyst. The user asked for the time. Your task is to present the time information in a clear, conversational way, using the same language as the user's original query.
+RULES:
+1.  **Find Timezone**: Determine the correct IANA timezone for the location (e.g., "America/New_York", "Europe/London").
+2.  **Focus on Timezone**: Return ONLY the IANA timezone name.
+3.  **Be Concise**: Do not add any extra text, explanations, or apologies.
+
+Location: "${locations[0]}"
+Timezone:
+`;
+        const timezoneResult = await llm.invoke(timezonePrompt);
+        const timezoneString =
+          typeof timezoneResult.content === 'string'
+            ? timezoneResult.content.trim()
+            : JSON.stringify(timezoneResult.content).trim();
+
+        if (!timezoneString) {
+          return {
+            output:
+              `I couldn't determine the timezone for "${locations[0]}". Please try a different location.`,
+            confidence: 0.4,
+          };
+        }
+
+        const result = await callAgent(
+          'current_time',
+          timezoneString,
+          context,
+        );
+        
+        const summarizerPrompt = `You are a time analyst. The user asked for the time. Your task is to present the time information in a clear, conversational way, using the same language as the user's original query.
 
 USER'S QUERY: "${input}"
 
@@ -103,16 +169,17 @@ INSTRUCTIONS:
 
 RESPONSE:`;
 
-      const finalResult = await callAgent(
-        'summarizer',
-        summarizerPrompt,
-        context,
-      );
+        const finalResult = await callAgent(
+          'summarizer',
+          summarizerPrompt,
+          context,
+        );
 
-      return {
-        output: finalResult.output,
-        confidence: result.confidence || 0.85,
-      };
+        return {
+          output: finalResult.output,
+          confidence: result.confidence || 0.85,
+        };
+      }
     } catch (error: any) {
       logger.error(`Error in time agent: ${error.message}`, error.stack);
       return {

@@ -146,72 +146,49 @@ const buildSearchQuery = (
   return `${question} ${languages} ${patterns} programming best practices`;
 };
 
+const detectLanguage = async (text: string, llm: any): Promise<string> => {
+  const prompt = `Detect the language of this text. Respond with only the language name (e.g., "Spanish", "English").\n\nText: "${text}"`;
+  const result = await llm.invoke(prompt);
+  return typeof result.content === 'string' ? result.content.trim() : 'English';
+};
+
 const synthesizeAnswer = async (
   codeAnalysis: CodeAnalysis,
   externalContext: string,
   question: string,
   codeBlocks: string[],
   llm: any,
+  language: string,
 ): Promise<string> => {
-  let answer = `## Code Analysis\n\n`;
+  const prompt = `You are an expert code assistant. A user has provided code, a question, and some analysis. Your task is to synthesize all this information into a single, helpful response in ${language}.
 
-  // Code summary
-  answer += `**Summary:** ${codeAnalysis.summary}\n\n`;
+**Your response must be entirely in ${language}.** This includes all headers and explanatory text.
 
-  // Languages detected
-  if (codeAnalysis.languages.size > 0) {
-    answer += `**Languages:** ${Array.from(codeAnalysis.languages).join(', ')}\n\n`;
-  }
+**User's Question:**
+${question}
 
-  // Patterns found
-  if (codeAnalysis.patterns.length > 0) {
-    answer += `**Patterns Detected:**\n${codeAnalysis.patterns.map((p) => `- ${p}`).join('\n')}\n\n`;
-  }
-
-  // Issues found
-  if (codeAnalysis.issues.length > 0) {
-    answer += `**Potential Issues:**\n${codeAnalysis.issues.map((i) => `- ${i}`).join('\n')}\n\n`;
-  }
-
-  // Answer to specific question
-  answer += `## Answer to Your Question\n\n`;
-  answer += await generateSpecificAnswer(
-    question,
-    codeAnalysis,
-    codeBlocks,
-    llm,
-  );
-
-  // External context if available
-  if (externalContext.trim()) {
-    answer += `\n\n## Additional Context\n${externalContext}`;
-  }
-
-  return answer;
-};
-
-const generateSpecificAnswer = async (
-  question: string,
-  codeAnalysis: CodeAnalysis,
-  codeBlocks: string[],
-  llm: any,
-): Promise<string> => {
-  const prompt = `You are an expert code assistant. A user has provided the following code and question.
-
-**Code:**
+**Provided Code:**
 \`\`\`
 ${codeBlocks.join('\n\n')}
 \`\`\`
 
-**Analysis:**
+**Code Analysis:**
+- Summary: ${codeAnalysis.summary}
 - Languages: ${Array.from(codeAnalysis.languages).join(', ')}
-- Patterns: ${codeAnalysis.patterns.join(', ')}
+- Patterns Detected: ${codeAnalysis.patterns.join(', ')}
 - Potential Issues: ${codeAnalysis.issues.join(', ')}
 
-**Question:**
-${question}
+**Additional Context from Searches:**
+${externalContext}
 
-Please provide a specific, helpful answer to the user's question. Address the problem directly and offer a clear solution or explanation.`;
+**Response Structure:**
+1.  Start with a "Code Analysis" section (in ${language}).
+2.  Include subsections for Summary, Languages, Patterns, and Issues (all in ${language}).
+3.  Follow with an "Answer to Your Question" section (in ${language}).
+4.  Provide a specific, helpful answer to the user's question, addressing the problem directly and offering a clear solution or explanation.
+5.  If there is additional context, include a final section for it (in ${language}).
+
+Please generate the complete response now.`;
 
   const result = await llm.invoke(prompt);
   return typeof result.content === 'string' ? result.content : '';
@@ -257,7 +234,7 @@ AgentRegistry.register({
     try {
       // Parse input to extract code and question
       const codeBlockRegex = /```(?:[\w]*\n)?([\s\S]*?)```/g;
-      const codeBlocks: string[] = [];
+      let codeBlocks: string[] = [];
       let match;
 
       while ((match = codeBlockRegex.exec(input)) !== null) {
@@ -268,9 +245,26 @@ AgentRegistry.register({
       const question = input.replace(/```[\s\S]*?```/g, '').trim();
 
       if (codeBlocks.length === 0) {
+        // If no code in current input, check history
+        if (context.chatHistory && context.chatHistory.length > 0) {
+          for (let i = context.chatHistory.length - 1; i >= 0; i--) {
+            const historyInput = context.chatHistory[i].content;
+            if (typeof historyInput === 'string') {
+              while ((match = codeBlockRegex.exec(historyInput)) !== null) {
+                codeBlocks.push(match[1].trim());
+              }
+              if (codeBlocks.length > 0) {
+                break; // Found code in history
+              }
+            }
+          }
+        }
+      }
+
+      if (codeBlocks.length === 0) {
         return {
           output:
-            'No code blocks found in your input. Please provide code using triple backticks (```) format.',
+            'No code blocks found in your input or recent history. Please provide code using triple backticks (```) format.',
           confidence: 0.2,
         };
       }
@@ -352,6 +346,9 @@ AgentRegistry.register({
         }
       }
 
+      // Detect language of the question
+      const questionLanguage = await detectLanguage(question, context.llm);
+
   // Step 3: Combine code analysis and search results for final answer
   const finalAnswer = await synthesizeAnswer(
     codeAnalysis,
@@ -359,6 +356,7 @@ AgentRegistry.register({
     question,
     codeBlocks,
     context.llm,
+    questionLanguage,
   );
 
       // Calculate confidence based on code analysis and external search
