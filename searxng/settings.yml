@@ -1,36 +1,64 @@
 use_default_settings: true
+
 server:
   secret_key: "a_very_secret_key_that_is_long_enough"
   base_url: "http://localhost:8888/"
+  limiter: false
+
 search:
   formats:
     - html
     - json
-plugins:
+  default_doi_resolver: "https://doi.org"
+  default_search_operator: "AND"
+  default_lang: "en"
+  fallback_lang: "en"
 
+engines:
+  - name: "duckduckgo"
+    engine: "duckduckgo"
+    shortcut: "ddg"
+    categories:
+      - "general"
+    disabled: false
+  - name: "mojeek"
+    engine: "mojeek"
+    shortcut: "mj"
+    categories:
+      - "general"
+    disabled: false
+  - name: "presearch"
+    engine: "presearch"
+    shortcut: "ps"
+    categories:
+      - "general"
+    disabled: false
+  - name: "startpage"
+    engine: "startpage"
+    shortcut: "sp"
+    categories:
+      - "general"
+    disabled: false
+
+redis:
+  url: redis://redis:6379/0
+
+plugins:
   searx.plugins.calculator.SXNGPlugin:
     active: true
-
   searx.plugins.hash_plugin.SXNGPlugin:
     active: true
-
   searx.plugins.self_info.SXNGPlugin:
     active: true
-
   searx.plugins.tracker_url_remover.SXNGPlugin:
     active: true
-
   searx.plugins.unit_converter.SXNGPlugin:
     active: true
-
   searx.plugins.ahmia_filter.SXNGPlugin:
     active: true
-
   searx.plugins.hostnames.SXNGPlugin:
     active: true
-
   searx.plugins.oa_doi_rewrite.SXNGPlugin:
     active: true
-
   searx.plugins.tor_check.SXNGPlugin:
     active: false

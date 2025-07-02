@@ -1,13 +1,13 @@
-import { AgentRegistry } from './agent-registry';
+import { Agent, AgentName } from './types';
 import { Logger } from '@nestjs/common';
 import { ChatOpenAI } from '@langchain/openai';
 import { BaseMessage } from '@langchain/core/messages';
 
-AgentRegistry.register({
-  name: 'subject_inference',
-  description:
-    'Infers the main subject and its descriptive context from the recent conversation history.',
-  handle: async (input, context) => {
+export class SubjectInferenceAgent implements Agent {
+  public name: AgentName = 'subject_inference';
+  public description =
+    'Infers the main subject and its descriptive context from the recent conversation history.';
+  public async handle(input, context) {
     const logger = new Logger('SubjectInferenceAgent');
     try {
       const { chatHistory, llm } = context;
@@ -95,7 +95,5 @@ ${recentMessages}
       );
       return { output: '{}' }; // Return empty JSON on error
     }
-  },
-});
-
-console.log('Subject Inference agent registered successfully');
+  }
+}

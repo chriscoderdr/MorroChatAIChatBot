@@ -18,7 +18,7 @@ export type AgentName =
   | 'SummarizerAgent'
   | 'weather'
   | 'WeatherAgent'
-  | 'web_search'
+  | 'search'
   | 'time'
   | 'current_time'
   | 'open_weather_map'

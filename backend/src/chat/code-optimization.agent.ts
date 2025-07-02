@@ -1,5 +1,5 @@
 // code-optimization.agent.ts
-import { AgentRegistry } from './agent-registry';
+import { Agent, AgentName } from './types';
 
 const detectLanguage = async (text: string, llm: any): Promise<string> => {
   const prompt = `Detect the language of this text. Respond with only the language name (e.g., "Spanish", "English").\n\nText: "${text}"`;
@@ -112,11 +112,11 @@ function superOptimized() {
   return null;
 }
 
-AgentRegistry.register({
-  name: 'code_optimization',
-  description:
-    'Specialized agent for analyzing and optimizing code performance, suggesting improvements and best practices.',
-  async handle(input, context) {
+export class CodeOptimizationAgent implements Agent {
+  public name: AgentName = 'code_optimization';
+  public description =
+    'Specialized agent for analyzing and optimizing code performance, suggesting improvements and best practices.';
+  public async handle(input, context) {
     try {
       // Extract code blocks from input
       const codeBlockRegex = /```(?:[\w]*\n)?([\s\S]*?)```/g;
@@ -220,5 +220,5 @@ Please generate the complete response now.`;
         confidence: 0.1,
       };
     }
-  },
-});
+  }
+}

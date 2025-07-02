@@ -1,12 +1,12 @@
-import { AgentRegistry } from './agent-registry';
+import { Agent, AgentName } from './types';
 import { Logger } from '@nestjs/common';
 
 // Create a dedicated weather agent that uses the open_weather_map tool correctly
-AgentRegistry.register({
-  name: 'weather',
-  description:
-    'Get current weather information for a specific location or compare weather between multiple locations.',
-  handle: async (input, context, callAgent) => {
+export class WeatherAgent implements Agent {
+  public name: AgentName = 'weather';
+  public description =
+    'Get current weather information for a specific location or compare weather between multiple locations.';
+  public async handle(input, context, callAgent) {
     const logger = new Logger('WeatherAgent');
     logger.log(`Processing weather request: "${input}"`);
 
@@ -188,7 +188,5 @@ RESPONSE:`;
         confidence: 0.2,
       };
     }
-  },
-});
-
-console.log('Weather agent registered successfully');
+  }
+}

@@ -1,12 +1,12 @@
-import { AgentRegistry } from './agent-registry';
+import { Agent, AgentName } from './types';
 import { Logger } from '@nestjs/common';
 
 // Create a dedicated time agent that uses the current_time tool correctly
-AgentRegistry.register({
-  name: 'time',
-  description:
-    'Get the current time for a specific location.',
-  handle: async (input, context, callAgent) => {
+export class TimeAgent implements Agent {
+  public name: AgentName = 'time';
+  public description =
+    'Get the current time for a specific location.';
+  public async handle(input, context, callAgent) {
     const logger = new Logger('TimeAgent');
     logger.log(`Processing time request: "${input}"`);
 
@@ -235,7 +235,5 @@ RESPONSE:`;
         confidence: 0.2,
       };
     }
-  },
-});
-
-console.log('Time agent registered successfully');
+  }
+}

@@ -1,11 +1,11 @@
-import { AgentRegistry } from './agent-registry';
+import { Agent, AgentName } from './types';
 import { BaseMessage } from '@langchain/core/messages';
 
-AgentRegistry.register({
-  name: 'general',
-  description:
-    'A general-purpose conversational agent for a wide range of topics, including answering questions about itself.',
-  handle: async (input, context) => {
+export class GeneralAgent implements Agent {
+  public name: AgentName = 'general';
+  public description =
+    'A general-purpose conversational agent for a wide range of topics, including answering questions about itself.';
+  public async handle(input, context) {
     try {
       const { llm, chatHistory } = context;
 
@@ -61,7 +61,5 @@ AI:`;
         confidence: 0.1,
       };
     }
-  },
-});
-
-console.log('General agent registered successfully');
+  }
+}

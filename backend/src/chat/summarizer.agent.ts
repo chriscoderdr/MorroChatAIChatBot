@@ -1,12 +1,13 @@
 // summarizer.agent.ts - LLM-powered summarization and text analysis agent
-import { AgentRegistry } from './agent-registry';
+import { Agent, AgentName } from './types';
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 
-AgentRegistry.register({
-  name: 'summarizer',
-  description:
-    'Uses LLM intelligence to summarize and analyze text with sophisticated understanding of context and requirements.',
-  handle: async (input, context) => {
+export class SummarizerAgent implements Agent {
+  public name: AgentName = 'summarizer';
+  public description =
+    'Uses LLM intelligence to summarize and analyze text with sophisticated understanding of context and requirements.';
+
+  public async handle(input, context) {
     try {
       // Create a focused prompt for the summarization task
       const summaryPrompt = `You are an expert text analyst and summarizer. Your task is to intelligently process and analyze the following text according to the specific requirements.
@@ -131,5 +132,5 @@ Provide your analysis or summary:`;
         confidence: 0.1,
       };
     }
-  },
-});
+  }
+}

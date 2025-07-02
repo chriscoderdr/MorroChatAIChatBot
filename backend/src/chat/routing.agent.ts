@@ -1,9 +1,8 @@
-import { AgentRegistry } from './agent-registry';
+import { Agent, AgentName, AgentContext } from './types';
 import { Logger } from '@nestjs/common';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { ChatOpenAI } from '@langchain/openai';
 import { BaseMessage } from '@langchain/core/messages';
-import { AgentContext } from './types';
 
 // Helper method to check if documents are available in chat context
 const hasDocumentContext = (context: AgentContext): boolean => {
@@ -55,11 +54,11 @@ const getAgentDescription = (agentName: string): string | undefined => {
  * Dedicated routing agent for predicting the best agent to handle a user query.
  * This agent is self-contained and returns a JSON routing decision.
  */
-AgentRegistry.register({
-  name: 'routing',
-  description:
-    'Determines the best agent to handle a user query using LLM analysis',
-  handle: async (input, context, _callAgent) => {
+export class RoutingAgent implements Agent {
+  public name: AgentName = 'routing';
+  public description =
+    'Determines the best agent to handle a user query using LLM analysis';
+  public async handle(input, context, _callAgent) {
     const logger = new Logger('RoutingAgent');
 
     try {
@@ -158,7 +157,5 @@ DO NOT WRITE ANY OTHER TEXT. ONLY JSON.`;
         confidence: 0.0,
       };
     }
-  },
-});
-
-console.log('Routing agent registered successfully');
+  }
+}

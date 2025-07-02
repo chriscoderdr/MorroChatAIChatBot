@@ -1,4 +1,4 @@
-import { AgentRegistry } from './agent-registry';
+import { Agent, AgentName } from './types';
 
 // Helper interfaces for code analysis
 interface CodeAnalysis {
@@ -226,11 +226,11 @@ const calculateCodeConfidence = (
   return Math.min(0.9, confidence);
 };
 
-AgentRegistry.register({
-  name: 'code_interpreter',
-  description:
-    'Analyzes code and answers questions about it. Can search for external context when needed.',
-  async handle(input, context, callAgent) {
+export class CodeInterpreterAgent implements Agent {
+  public name: AgentName = 'code_interpreter';
+  public description =
+    'Analyzes code and answers questions about it. Can search for external context when needed.';
+  public async handle(input, context, callAgent) {
     try {
       // Parse input to extract code and question
       const codeBlockRegex = /```(?:[\w]*\n)?([\s\S]*?)```/g;
@@ -375,5 +375,5 @@ AgentRegistry.register({
         confidence: 0.1,
       };
     }
-  },
-});
+  }
+}

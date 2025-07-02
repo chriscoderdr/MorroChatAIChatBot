@@ -1,16 +1,16 @@
 // document-search.agent.ts
-import { AgentRegistry } from './agent-registry';
+import { Agent, AgentName } from './types';
 import { ChromaClient } from 'chromadb';
 import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai';
 import { Logger } from '@nestjs/common';
 
 const logger = new Logger('DocumentSearchAgent');
 
-AgentRegistry.register({
-  name: 'document_search',
-  description:
-    'Searches through user-uploaded documents to find specific information and provide a summarized answer.',
-  handle: async (input, context, callAgent) => {
+export class DocumentSearchAgent implements Agent {
+  public name: AgentName = 'document_search';
+  public description =
+    'Searches through user-uploaded documents to find specific information and provide a summarized answer.';
+  public async handle(input, context, callAgent) {
     const { userId, geminiApiKey } = context;
 
     if (!userId) {
@@ -110,7 +110,5 @@ ${retrievedContext}
         confidence: 0.2,
       };
     }
-  },
-});
-
-console.log('Document Search agent registered successfully');
+  }
+}

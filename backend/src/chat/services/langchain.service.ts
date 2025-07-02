@@ -49,7 +49,7 @@ export class LangChainService {
     const llm = this.llmService.getLlm();
 
     const searchTool = new DynamicStructuredTool({
-      name: 'web_search',
+      name: 'search',
       description:
         'Searches the web for up-to-date information using a configurable search engine. Supports complex queries including site exclusions.',
       schema: z.object({
@@ -84,7 +84,9 @@ export class LangChainService {
           url.searchParams.append('format', 'json');
           try {
             const response = await fetch(url.toString(), {
-              headers: { Accept: 'application/json' },
+              headers: {
+                Accept: 'application/json',
+              },
             });
             if (!response.ok) {
               const errorBody = await response.text();
@@ -132,7 +134,14 @@ export class LangChainService {
           try {
             const tavily = new TavilySearch({ tavilyApiKey });
             const results = await tavily.invoke({ query: fullQuery });
-            return results; // Tavily also returns a string
+            // Check for Tavily's specific rate limit error in the response
+            if (typeof results === 'string' && results.includes('rate limit')) {
+              this.logger.warn(
+                'Tavily search hit a rate limit, falling back to SearxNG',
+              );
+            } else {
+              return results; // Tavily also returns a string
+            }
           } catch (e) {
             this.logger.error(
               'Tavily search failed, falling back to SearxNG',
@@ -378,7 +387,11 @@ export class LangChainService {
         url.searchParams.append('format', 'json');
         try {
           const response = await fetch(url.toString(), {
-            headers: { Accept: 'application/json' },
+            headers: {
+              Accept: 'application/json',
+              'X-Forwarded-For': '127.0.0.1',
+              'X-Real-IP': '127.0.0.1',
+            },
           });
           const json = await response.json();
           this.logger.debug(
@@ -451,9 +464,9 @@ export class LangChainService {
       },
     });
 
-    if (!AgentRegistry.getAgent('web_search')) {
+    if (!AgentRegistry.getAgent('search')) {
       AgentRegistry.register({
-        name: 'web_search',
+        name: 'search',
         description: searchTool.description,
         handle: async (input: string, _context) => {
           let query: string;

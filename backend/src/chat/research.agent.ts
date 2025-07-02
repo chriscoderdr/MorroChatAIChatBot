@@ -1,15 +1,16 @@
 // research.agent.ts - A self-contained, intelligent research agent
-import { AgentRegistry } from './agent-registry';
+import { Agent, AgentName } from './types';
 import { Logger } from '@nestjs/common';
 import { ChatOpenAI } from '@langchain/openai';
 
 const logger = new Logger('ResearchAgent');
 
-AgentRegistry.register({
-  name: 'research',
-  description:
-    'Performs multi-step, intelligent web research to answer complex questions.',
-  handle: async (input, context, callAgent) => {
+export class ResearchAgent implements Agent {
+  public name: AgentName = 'research';
+  public description =
+    'Performs multi-step, intelligent web research to answer complex questions.';
+
+  public async handle(input, context, callAgent) {
     const MAX_ITERATIONS = 5;
     const researchHistory: { query: string | object; results: string }[] = [];
     let currentQuery: string | object = input;
@@ -109,7 +110,7 @@ Respond with a JSON object with two keys: "research_topic" and "exclude_sites".
         typeof currentQuery === 'string'
           ? currentQuery
           : JSON.stringify(currentQuery);
-      const searchResult = await callAgent('web_search', searchInput, context);
+      const searchResult = await callAgent('search', searchInput, context);
       const searchOutput =
         typeof searchResult.output === 'string'
           ? searchResult.output
@@ -235,5 +236,5 @@ ${historyText}
       output: finalAnswer,
       confidence: 0.6, // Confidence is a bit higher because it's a summarized answer
     };
-  },
-});
+  }
+}
