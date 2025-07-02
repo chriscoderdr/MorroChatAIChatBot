@@ -24,20 +24,18 @@ AgentRegistry.register({
         };
       }
 
-      const extractionPrompt = `You are a location extraction assistant. Your task is to extract city/location names from weather-related queries.
+      const extractionPrompt = `
+You are a location extraction expert. Your task is to extract up to two location names from a user's query.
 
 RULES:
-1. If the query compares multiple locations (e.g., using "vs", "or", "and", "compara"), return the locations separated by " | ".
-2. For a single location, extract ONLY the city/location name.
-3. Format as "City, Country" when possible (e.g., "Santo Domingo, DO", "New York, US").
-4. Use standard country codes (US, DO, ES, FR, JP, PH, etc.).
-5. If no country is specified, return just the city name.
-6. Remove ALL question words, weather terms, and extra text.
-7. Return ONLY the location(s), nothing else.
+1.  **Extract Locations**: Identify and extract the city and country (e.g., "Santo Domingo, DO", "New York, US").
+2.  **Handle Comparisons**: If the query compares two locations (e.g., "weather in Santo Domingo vs New York"), separate them with " | ".
+3.  **Focus on Location**: Return ONLY the location name(s). Remove all other words, questions, and conversational text.
+4.  **Be Concise**: Do not add any extra text, explanations, or apologies.
 
 Query: "${input}"
-Location(s):`;
-
+Location(s):
+`;
       const extractionResult = await llm.invoke(extractionPrompt);
       const locationsString =
         typeof extractionResult.content === 'string'
@@ -109,8 +107,29 @@ COMPARISON:`;
           locations[0],
           context,
         );
+        
+        const summarizerPrompt = `You are a weather analyst. The user asked for the weather. Your task is to present the weather information in a clear, conversational way, using the same language as the user's original query.
+
+USER'S QUERY: "${input}"
+
+WEATHER DATA:
+${result.output}
+
+INSTRUCTIONS:
+1.  Analyze the user's query to understand the language used.
+2.  Present the weather data in a user-friendly format.
+3.  Your entire response should be in the same language as the user's query. For example, if the user asked in Spanish, you must respond in Spanish.
+
+RESPONSE:`;
+
+        const finalResult = await callAgent(
+          'summarizer',
+          summarizerPrompt,
+          context,
+        );
+
         return {
-          output: result.output,
+          output: finalResult.output,
           confidence: result.confidence || 0.85,
         };
       }

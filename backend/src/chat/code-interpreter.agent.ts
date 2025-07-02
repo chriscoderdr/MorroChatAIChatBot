@@ -10,7 +10,10 @@ interface CodeAnalysis {
 }
 
 // Helper functions for code analysis
-const analyzeCode = (codeBlocks: string[]): CodeAnalysis => {
+const analyzeCode = async (
+  codeBlocks: string[],
+  llm: any,
+): Promise<CodeAnalysis> => {
   const analysis: CodeAnalysis = {
     languages: new Set<string>(),
     patterns: [],
@@ -19,19 +22,38 @@ const analyzeCode = (codeBlocks: string[]): CodeAnalysis => {
     summary: '',
   };
 
-  for (const code of codeBlocks) {
-    // Detect programming language
-    const language = detectLanguage(code);
+  const detectionPromises = codeBlocks.map(async (code) => {
+    const langPrompt = `Detect the programming language of this code. Respond with only the language name (e.g., "python", "javascript").\n\n\`\`\`\n${code}\n\`\`\``;
+    const langResult = await llm.invoke(langPrompt);
+    const language =
+      typeof langResult.content === 'string'
+        ? langResult.content.trim().toLowerCase()
+        : 'unknown';
     analysis.languages.add(language);
+    return { code, language };
+  });
 
-    // Analyze patterns and structure
-    const patterns = analyzePatterns(code);
-    analysis.patterns.push(...patterns);
+  const detectedLanguages = await Promise.all(detectionPromises);
 
-    // Check for common issues
-    const issues = findCodeIssues(code, language);
-    analysis.issues.push(...issues);
-  }
+  const analysisPromises = detectedLanguages.map(async ({ code, language }) => {
+    const analysisPrompt = `Analyze this ${language} code for patterns and potential issues.
+
+Code:
+\`\`\`${language}
+${code}
+\`\`\`
+
+Respond with a JSON object with two keys: "patterns" (an array of strings) and "issues" (an array of strings).`;
+    const analysisResult = await llm.invoke(analysisPrompt);
+    const cleanedJson = stripMarkdown(
+      typeof analysisResult.content === 'string' ? analysisResult.content : '',
+    );
+    const resultJson = JSON.parse(cleanedJson || '{}');
+    analysis.patterns.push(...(resultJson.patterns || []));
+    analysis.issues.push(...(resultJson.issues || []));
+  });
+
+  await Promise.all(analysisPromises);
 
   // Generate summary
   analysis.summary = generateCodeSummary(
@@ -42,113 +64,8 @@ const analyzeCode = (codeBlocks: string[]): CodeAnalysis => {
   return analysis;
 };
 
-const detectLanguage = (code: string): string => {
-  const indicators = {
-    javascript: [
-      'const ',
-      'let ',
-      'var ',
-      'function ',
-      '=>',
-      'console.log',
-      'require(',
-      'import ',
-    ],
-    typescript: [
-      'interface ',
-      'type ',
-      ': string',
-      ': number',
-      'async ',
-      'Promise<',
-    ],
-    python: [
-      'def ',
-      'import ',
-      'from ',
-      'print(',
-      'if __name__',
-      '#!/usr/bin/env python',
-    ],
-    java: [
-      'public class',
-      'private ',
-      'public static void main',
-      'System.out.',
-    ],
-    csharp: ['using System', 'public class', 'Console.WriteLine', 'namespace '],
-    cpp: ['#include', 'using namespace', 'std::', 'cout <<', 'int main('],
-    sql: [
-      'SELECT ',
-      'FROM ',
-      'WHERE ',
-      'INSERT INTO',
-      'UPDATE ',
-      'CREATE TABLE',
-    ],
-    html: ['<html', '<div', '<script', '<!DOCTYPE'],
-    css: ['{', '}', ':', ';', 'color:', 'background:'],
-    shell: ['#!/bin/bash', 'echo ', 'cd ', 'ls ', 'grep '],
-  };
-
-  for (const [lang, patterns] of Object.entries(indicators)) {
-    const score = patterns.reduce(
-      (count, pattern) =>
-        count + (code.toLowerCase().includes(pattern.toLowerCase()) ? 1 : 0),
-      0,
-    );
-    if (score >= 2) return lang;
-  }
-
-  return 'unknown';
-};
-
-const analyzePatterns = (code: string): string[] => {
-  const patterns: string[] = [];
-
-  // Common patterns
-  if (code.includes('async') || code.includes('await'))
-    patterns.push('asynchronous programming');
-  if (code.includes('class ') || code.includes('interface '))
-    patterns.push('object-oriented design');
-  if (code.includes('try') && code.includes('catch'))
-    patterns.push('error handling');
-  if (
-    code.includes('for ') ||
-    code.includes('while ') ||
-    code.includes('forEach')
-  )
-    patterns.push('loops and iteration');
-  if (code.includes('function') || code.includes('=>') || code.includes('def '))
-    patterns.push('function definitions');
-
-  return patterns;
-};
-
-const findCodeIssues = (code: string, language: string): string[] => {
-  const issues: string[] = [];
-
-  // Common issues across languages
-  if (code.includes('TODO') || code.includes('FIXME'))
-    issues.push('Contains TODO/FIXME comments');
-  if (code.split('\n').length > 50)
-    issues.push('Function/file may be too long');
-  if ((code.match(/if/g) || []).length > 5)
-    issues.push('High cyclomatic complexity (many if statements)');
-
-  // Language-specific issues
-  if (language === 'javascript' || language === 'typescript') {
-    if (code.includes('var ')) issues.push('Uses var instead of let/const');
-    if (code.includes('== ') && !code.includes('=== '))
-      issues.push('Uses loose equality (==) instead of strict (===)');
-  }
-
-  if (language === 'python') {
-    if (!code.includes('def ') && code.length > 100)
-      issues.push('Long script without function definitions');
-  }
-
-  return issues;
+const stripMarkdown = (text: string): string => {
+  return text.replace(/```json\n|```/g, '');
 };
 
 const generateCodeSummary = (
@@ -229,12 +146,13 @@ const buildSearchQuery = (
   return `${question} ${languages} ${patterns} programming best practices`;
 };
 
-const synthesizeAnswer = (
+const synthesizeAnswer = async (
   codeAnalysis: CodeAnalysis,
   externalContext: string,
   question: string,
   codeBlocks: string[],
-): string => {
+  llm: any,
+): Promise<string> => {
   let answer = `## Code Analysis\n\n`;
 
   // Code summary
@@ -257,7 +175,12 @@ const synthesizeAnswer = (
 
   // Answer to specific question
   answer += `## Answer to Your Question\n\n`;
-  answer += generateSpecificAnswer(question, codeAnalysis, codeBlocks);
+  answer += await generateSpecificAnswer(
+    question,
+    codeAnalysis,
+    codeBlocks,
+    llm,
+  );
 
   // External context if available
   if (externalContext.trim()) {
@@ -267,57 +190,31 @@ const synthesizeAnswer = (
   return answer;
 };
 
-const generateSpecificAnswer = (
+const generateSpecificAnswer = async (
   question: string,
   codeAnalysis: CodeAnalysis,
   codeBlocks: string[],
-): string => {
-  const questionLower = question.toLowerCase();
-  const code = codeBlocks.join('\n');
+  llm: any,
+): Promise<string> => {
+  const prompt = `You are an expert code assistant. A user has provided the following code and question.
 
-  if (
-    questionLower.includes('what does') ||
-    questionLower.includes('explain')
-  ) {
-    return `This code defines a function that appears to be for ${codeAnalysis.patterns.join(' and ')}. It uses the ${Array.from(codeAnalysis.languages).join('/')} language. ${codeAnalysis.summary}.`;
-  }
-
-  if (questionLower.includes('improve') || questionLower.includes('optimize')) {
-    let suggestions = '';
-    if (codeAnalysis.issues.length > 0) {
-      suggestions += `Based on the analysis, here are areas for improvement:\n${codeAnalysis.issues.map((i) => `- ${i}`).join('\n')}`;
-    }
-    if (questionLower.includes('regex') || code.includes('re.search')) {
-      suggestions += `\n- For the regex pattern, consider making it more flexible. For example, instead of \`where.*package\`, you could use \`where's my package\`.`;
-    }
-    return (
-      suggestions ||
-      'The code seems reasonable, but you could consider adding more specific error handling or performance profiling.'
-    );
-  }
-
-  if (
-    questionLower.includes('error') ||
-    questionLower.includes('bug') ||
-    questionLower.includes('failing')
-  ) {
-    if (questionLower.includes('regex') || code.includes('re.search')) {
-      return `The issue with your regex pattern \`(track|status|where.*package|delivery).*order\` is that it requires the word "order" to appear *after* one of the keywords. For a query like "where's my package", the pattern fails because "order" is missing.
-
-**Suggested Fix:**
-Make the "order" part optional or broaden the pattern. Here is an improved version:
-
-\`\`\`python
-if re.search(r'track|status|where.*package|delivery|order', message):
-    return 'order_status'
+**Code:**
+\`\`\`
+${codeBlocks.join('\n\n')}
 \`\`\`
 
-This pattern checks for any of the keywords independently, which should correctly identify intents like "track order" and "where's my package".`;
-    }
-    return `Potential issues could be related to: ${codeAnalysis.issues.join(', ') || 'the logic inside the function'}. To debug, I would recommend adding print statements to see the values of key variables.`;
-  }
+**Analysis:**
+- Languages: ${Array.from(codeAnalysis.languages).join(', ')}
+- Patterns: ${codeAnalysis.patterns.join(', ')}
+- Potential Issues: ${codeAnalysis.issues.join(', ')}
 
-  return `Based on the code analysis, this ${Array.from(codeAnalysis.languages).join('/')} code implements ${codeAnalysis.patterns.join(', ')}. ${codeAnalysis.summary}`;
+**Question:**
+${question}
+
+Please provide a specific, helpful answer to the user's question. Address the problem directly and offer a clear solution or explanation.`;
+
+  const result = await llm.invoke(prompt);
+  return typeof result.content === 'string' ? result.content : '';
 };
 
 const calculateCodeConfidence = (
@@ -387,13 +284,20 @@ AgentRegistry.register({
       }
 
       // Step 1: Analyze the code
-      const codeAnalysis = analyzeCode(codeBlocks);
+      const codeAnalysis = await analyzeCode(codeBlocks, context.llm);
 
       // Step 2: Determine if external context is needed
       const needsExternalContext = shouldSearchForContext(
         question,
         codeAnalysis,
       );
+
+      if (question.toLowerCase().includes('optimize')) {
+        if (!callAgent) {
+          throw new Error('callAgent is not available');
+        }
+        return callAgent('code_optimization', input, context);
+      }
 
       let externalContext = '';
       let searchConfidence = 0;
@@ -448,13 +352,14 @@ AgentRegistry.register({
         }
       }
 
-      // Step 3: Combine code analysis and search results for final answer
-      const finalAnswer = synthesizeAnswer(
-        codeAnalysis,
-        externalContext,
-        question,
-        codeBlocks,
-      );
+  // Step 3: Combine code analysis and search results for final answer
+  const finalAnswer = await synthesizeAnswer(
+    codeAnalysis,
+    externalContext,
+    question,
+    codeBlocks,
+    context.llm,
+  );
 
       // Calculate confidence based on code analysis and external search
       const codeConfidence = calculateCodeConfidence(codeBlocks, question);
