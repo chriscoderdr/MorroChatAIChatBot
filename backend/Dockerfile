@@ -1,14 +1,18 @@
+# syntax=docker/dockerfile:1
+
 # ---- Build Stage ----
 FROM node:20-slim AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm set fetch-retries 5 \
+RUN --mount=type=cache,target=/root/.npm \
+  npm set fetch-retries 5 \
   && npm set fetch-retry-mintimeout 20000 \
   && npm set fetch-retry-maxtimeout 120000 \
   && until npm ci; do echo "Retrying npm ci..."; sleep 10; done
 COPY . .
 ENV NODE_OPTIONS=--max-old-space-size=2048
 RUN npm run build
+RUN npm prune --production
 
 # ---- Production Stage ----
 FROM node:20-slim
