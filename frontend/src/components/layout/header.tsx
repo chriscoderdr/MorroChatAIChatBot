@@ -42,6 +42,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isSidebarVisibl
       </div>
       {/* E2EE Indicator, Privacy Policy, and FAQ/Help link */}
       <div className="hidden sm:flex items-center gap-4">
+        <span className="h-6 border-l border-gray-700 mx-2" aria-hidden="true"></span>
         <E2EEIndicator />
         <button
           className="text-xs text-blue-300 hover:text-blue-200 underline focus:outline-none focus:ring-2 focus:ring-blue-400 rounded px-2 py-1 transition-colors"

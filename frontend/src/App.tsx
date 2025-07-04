@@ -3,6 +3,7 @@ import { Header } from './components/layout/header';
 import { FAQModal } from './components/ui/faq-modal';
 import { Sidebar } from './components/layout/side-bar';
 import { useNewChatMutation } from './hooks/useNewChatMutation';
+import { Toast } from './components/ui/toast';
 import { ChatMessage } from './components/chat/chat-message';
 import { EnhancedChatInput } from './components/chat/enhanced-chat-input';
 import { FileUploadBubble } from './components/chat/file-upload-bubble';
@@ -56,13 +57,23 @@ function App() {
   };
 
   // Handler for starting a new chat session
+  const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' | 'info' | 'loading' } | null>(null);
+
   const handleNewChat = () => {
     setMessages([]); // Clear chat history
     setLastFailedMessage(null);
     setLastMessageWasCodingRelated(false);
     setFileUpload(null);
-    newChatMutation.mutate();
-    // Optionally, reset other state if needed
+    setToast({ message: 'Starting new chat...', type: 'loading' });
+    newChatMutation.mutate(undefined, {
+      onSuccess: () => {
+        setToast({ message: 'New chat started!', type: 'success' });
+        setTimeout(() => setToast(null), 1200);
+      },
+      onError: (error: any) => {
+        setToast({ message: error?.message || 'Failed to start new chat', type: 'error' });
+      }
+    });
   };
   const [messages, setMessages] = useState<IMessage[]>([]);
   const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null);
@@ -275,7 +286,7 @@ function App() {
             </button>
           </div>
         </div>
-        <main ref={chatContainerRef} className="flex-1 p-0 flex flex-col min-h-0">
+  <main ref={chatContainerRef} className="flex-1 p-0 flex flex-col min-h-0">
           <div className={messages.length === 0 ? 'flex-1 w-full flex flex-col min-h-0' : 'max-w-5xl mx-auto w-full flex flex-col flex-1 min-h-0'}>
             {/* Show empty state or history loading/error if no messages */}
             {messages.length === 0 ? (
@@ -343,6 +354,13 @@ function App() {
           isCodeGuideOpen={isCodeGuideOpen}
           setIsCodeGuideOpen={setIsCodeGuideOpen}
         />
+        {toast && (
+          <Toast
+            message={toast.message}
+            type={toast.type}
+            onClose={() => setToast(null)}
+          />
+        )}
         <CodeFormattingGuide 
           isOpen={isCodeGuideOpen} 
           onClose={() => setIsCodeGuideOpen(false)} 
