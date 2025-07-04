@@ -3,6 +3,9 @@ import { AgentRegistry } from './agent-registry';
 import { SummarizerAgent } from './agents/summarizer.agent';
 import { ResearchAgent } from './agents/research.agent';
 import { CodeInterpreterAgent } from './agents/code-interpreter.agent';
+import { CodeGenerationAgent } from './agents/code-generation.agent';
+import { ProfanityCheckAgent } from './agents/profanity-check.agent';
+import { NonsenseCheckAgent } from './agents/nonsense-check.agent';
 import { CodeOptimizationAgent } from './agents/code-optimization.agent';
 import { WeatherAgent } from './agents/weather.agent';
 import { RoutingAgent } from './agents/routing.agent';
@@ -15,6 +18,9 @@ const agentProviders: Provider[] = [
   SummarizerAgent,
   ResearchAgent,
   CodeInterpreterAgent,
+  CodeGenerationAgent,
+  ProfanityCheckAgent,
+  NonsenseCheckAgent,
   CodeOptimizationAgent,
   WeatherAgent,
   RoutingAgent,

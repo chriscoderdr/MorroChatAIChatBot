@@ -90,6 +90,14 @@ const tests = {
     { name: 'On-Topic Query', message: 'Tell me about Dominican food' }, // Assuming CHAT_DEFAULT_TOPIC="Dominican Food"
     { name: 'Off-Topic Query', message: 'Talk me about baseball' },
     { name: 'On-Topic Recipe', message: 'How do I cook mangú?' },
+  ],
+  profanity: [
+    { name: 'Profane Query', message: 'fuck you' },
+    { name: 'Another Profane Query', message: 'what the fuck' },
+  ],
+  nonsense: [
+    { name: 'Nonsense Query', message: 'asdfasdfasdf' },
+    { name: 'Another Nonsense Query', message: '23452345' },
   ]
 };
 

@@ -38,7 +38,9 @@ const getAgentDescription = (agentName: string): string | undefined => {
     document_search:
       'Searches through user-uploaded documents to find specific information.',
     summarizer: 'Summarizes long pieces of text or content.',
-    code_interpreter: 'Analyzes, explains, and executes code snippets.',
+    code_interpreter:
+      'Analyzes, explains, and answers questions about existing code snippets provided by the user.',
+    code_generation: 'Generates code based on user requirements.',
     code_optimization: 'Optimizes and improves existing code.',
     calculator:
       'Performs mathematical calculations and evaluates expressions.',
@@ -119,9 +121,10 @@ ${chatDefaultTopic ? `1. Queries unrelated to "${chatDefaultTopic}" → general`
 8. Weather queries ("weather", "temperature") → weather
 9. Explicit document queries ("document", "what is this about") → document_search
 10. Research queries (companies, people, facts) → research
-11. Code queries → code_interpreter
-12. Ambiguous queries WITH document context → document_search
-13. Everything else → general
+11. Code analysis queries (user provides code) -> code_interpreter
+12. Code generation queries (user asks for code) -> code_generation
+13. Ambiguous queries WITH document context → document_search
+14. Everything else → general
 
 MANDATORY RESPONSE FORMAT - RESPOND WITH ONLY THIS JSON:
 {"agentName": "agent_name", "confidence": 0.85, "reasoning": "brief reason"}

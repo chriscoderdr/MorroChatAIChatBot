@@ -207,6 +207,77 @@ export class AgentOrchestrator {
       console.log(`Available agents: ${agentNames.join(', ')}`);
       console.log(`Confidence threshold: ${threshold}`);
 
+      // First, check for profanity
+      const { nastyScoreService, nonsenseScoreService, userId } = context;
+      if (nastyScoreService && userId) {
+        const score = await nastyScoreService.getScore(userId);
+        if (score >= 5) {
+          return {
+            agent: 'nasty_score_block',
+            result: {
+              output:
+                'You have been blocked due to repeated inappropriate language.',
+              confidence: 1.0,
+            },
+            all: {},
+          };
+        }
+      }
+
+      const profanityCheck = await this.runSingleAgent(
+        'profanity_check',
+        input,
+        context,
+      );
+      if (profanityCheck.confidence === 1.0) {
+        if (nastyScoreService && userId) {
+          await nastyScoreService.incrementScore(userId);
+        }
+        return {
+          agent: 'profanity_check',
+          result: {
+            output: profanityCheck.output, // The output is now the creative response
+            confidence: 1.0,
+          },
+          all: { profanity_check: profanityCheck },
+        };
+      }
+
+      // Second, check for nonsense
+      if (nonsenseScoreService && userId) {
+        const score = await nonsenseScoreService.getScore(userId);
+        if (score >= 5) {
+          return {
+            agent: 'nonsense_block',
+            result: {
+              output:
+                'You have been blocked due to repeated nonsensical input.',
+              confidence: 1.0,
+            },
+            all: {},
+          };
+        }
+      }
+
+      const nonsenseCheck = await this.runSingleAgent(
+        'nonsense_check',
+        input,
+        context,
+      );
+      if (nonsenseCheck.confidence === 1.0) {
+        if (nonsenseScoreService && userId) {
+          await nonsenseScoreService.incrementScore(userId);
+        }
+        return {
+          agent: 'nonsense_check',
+          result: {
+            output: nonsenseCheck.output,
+            confidence: 1.0,
+          },
+          all: { nonsense_check: nonsenseCheck },
+        };
+      }
+
       // Get LLM prediction for best agent
       const prediction = await this.predictBestAgent(
         input,

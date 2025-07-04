@@ -13,6 +13,8 @@ import { Model } from 'mongoose';
 import { BaseMessage } from '@langchain/core/messages';
 import { AgentOrchestrator } from '../agent-orchestrator';
 import { LlmService } from '../../llm/llm.service';
+import { NastyScoreService } from './nasty-score.service';
+import { NonsenseScoreService } from './nonsense-score.service';
 import { ChatOpenAI } from '@langchain/openai';
 import { createCalculatorTool } from '../tools/calculator.tool';
 import { createCurrencyConverterTool } from '../tools/currency-converter.tool';
@@ -30,6 +32,8 @@ export class LangChainService {
     private readonly configService: ConfigService,
     @InjectModel(ChatSession.name) private chatSessionModel: Model<ChatSession>,
     private readonly llmService: LlmService,
+    private readonly nastyScoreService: NastyScoreService,
+    private readonly nonsenseScoreService: NonsenseScoreService,
   ) {
     this.logger.log(
       'Initializing LangChainService with AgentOrchestrator for agent routing.',
@@ -257,6 +261,8 @@ Direct query:`;
           sessionId: sessionId,
           chatHistory: input.chat_history,
           llm,
+          nastyScoreService: this.nastyScoreService,
+          nonsenseScoreService: this.nonsenseScoreService,
           geminiApiKey: this.configService.get<string>('GEMINI_API_KEY'),
           chatDefaultTopic: this.configService.get<string>('app.chatDefaultTopic'),
           configurable: { ...(config?.configurable || {}), sessionId },

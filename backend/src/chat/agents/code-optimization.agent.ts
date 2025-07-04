@@ -2,9 +2,14 @@
 import { Agent, AgentName } from '../types';
 
 const detectLanguage = async (text: string, llm: any): Promise<string> => {
-  const prompt = `Detect the language of this text. Respond with only the language name (e.g., "Spanish", "English").\n\nText: "${text}"`;
+  const prompt = `Detect the language of this text. If the text is nonsensical or a mix of random characters, respond with "Nonsense". Otherwise, respond with only the language name (e.g., "Spanish", "English", "French"). If you cannot determine the language, default to "English".\n\nText: "${text}"`;
   const result = await llm.invoke(prompt);
-  return typeof result.content === 'string' ? result.content.trim() : 'English';
+  const detectedLanguage =
+    typeof result.content === 'string' ? result.content.trim() : 'English';
+  if (detectedLanguage.toLowerCase() === 'nonsense') {
+    return 'Nonsense';
+  }
+  return detectedLanguage;
 };
 
 // Helper functions for code analysis
@@ -168,6 +173,14 @@ export class CodeOptimizationAgent implements Agent {
 
       const question = input.replace(/```[\s\S]*?```/g, '').trim();
       const questionLanguage = await detectLanguage(question, context.llm);
+
+      if (questionLanguage === 'Nonsense') {
+        return {
+          output:
+            "I'm sorry, I didn't understand your request. Could you please rephrase it?",
+          confidence: 0.3,
+        };
+      }
 
       const synthesisPrompt = `You are an expert code optimization assistant. A user has provided code and is asking for optimizations. Your response must be entirely in ${questionLanguage}.
 

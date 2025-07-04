@@ -9,29 +9,29 @@ interface EmptyStateProps {
 
 export const EmptyState: React.FC<EmptyStateProps> = ({ onSuggestionClick }) => {
   const suggestionCards = [
-    { 
-      title: "Code Analysis", 
-      description: "Upload or paste code for optimization review",
+    {
+      title: "Refactor Code",
+      description: "Modernize your codebase with the latest syntax",
       icon: Code2,
-      example: "```javascript\nfunction example() {\n  return 'Hello';\n}\n```"
+      example: "Refactor this Javascript class to a functional component using hooks.\n```javascript\nclass Counter extends React.Component {\n  constructor(props) {\n    super(props);\n    this.state = { count: 0 };\n  }\n\n  render() {\n    return (\n      <div>\n        <p>You clicked {this.state.count} times</p>\n        <button onClick={() => this.setState({ count: this.state.count + 1 })}>\n          Click me\n        </button>\n      </div>\n    );\n  }\n}\n```"
     },
-    { 
-      title: "Performance Review", 
-      description: "Analyze algorithm complexity and performance",
+    {
+      title: "Optimize Performance",
+      description: "Analyze and improve algorithm efficiency",
       icon: Zap,
-      example: "Analyze the performance of:\n```code\n// Your algorithm here\n```"
+      example: "What is the Big O notation of this function, and can you optimize it?\n```javascript\nfunction findSum(arr, target) {\n  for (let i = 0; i < arr.length; i++) {\n    for (let j = i + 1; j < arr.length; j++) {\n      if (arr[i] + arr[j] === target) {\n        return [arr[i], arr[j]];\n      }\n    }\n  }\n}\n```"
     },
-    { 
-      title: "General Questions", 
-      description: "Ask about programming concepts and best practices",
+    {
+      title: "Architectural Advice",
+      description: "Get insights on system design and best practices",
       icon: Lightbulb,
-      example: "Explain the difference between REST and GraphQL"
+      example: "What are the pros and cons of using WebSockets vs. Server-Sent Events for real-time applications?"
     },
-    { 
-      title: "Debug Help", 
-      description: "Get help fixing bugs and errors",
+    {
+      title: "Debug Async Code",
+      description: "Find and fix tricky asynchronous bugs",
       icon: Search,
-      example: "Debug this code:\n```python\n# Your buggy code here\n```"
+      example: "Why is this async function not returning the data correctly?\n```javascript\nasync function fetchData(url) {\n  const response = fetch(url);\n  const data = response.json();\n  return data;\n}\n```"
     },
   ];
 

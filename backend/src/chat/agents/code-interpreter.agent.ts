@@ -147,9 +147,14 @@ const buildSearchQuery = (
 };
 
 const detectLanguage = async (text: string, llm: any): Promise<string> => {
-  const prompt = `Detect the language of this text. Respond with only the language name (e.g., "Spanish", "English").\n\nText: "${text}"`;
+  const prompt = `Detect the language of this text. If the text is nonsensical or a mix of random characters, respond with "Nonsense". Otherwise, respond with only the language name (e.g., "Spanish", "English", "French"). If you cannot determine the language, default to "English".\n\nText: "${text}"`;
   const result = await llm.invoke(prompt);
-  return typeof result.content === 'string' ? result.content.trim() : 'English';
+  const detectedLanguage =
+    typeof result.content === 'string' ? result.content.trim() : 'English';
+  if (detectedLanguage.toLowerCase() === 'nonsense') {
+    return 'Nonsense';
+  }
+  return detectedLanguage;
 };
 
 const synthesizeAnswer = async (
@@ -229,7 +234,7 @@ const calculateCodeConfidence = (
 export class CodeInterpreterAgent implements Agent {
   public name: AgentName = 'code_interpreter';
   public description =
-    'Analyzes code and answers questions about it. Can search for external context when needed.';
+    'Analyzes, explains, and answers questions about existing code snippets provided by the user.';
   public async handle(input, context, callAgent) {
     try {
       // Parse input to extract code and question
@@ -348,6 +353,14 @@ export class CodeInterpreterAgent implements Agent {
 
       // Detect language of the question
       const questionLanguage = await detectLanguage(question, context.llm);
+
+      if (questionLanguage === 'Nonsense') {
+        return {
+          output:
+            "I'm sorry, I didn't understand your request. Could you please rephrase it?",
+          confidence: 0.3,
+        };
+      }
 
   // Step 3: Combine code analysis and search results for final answer
   const finalAnswer = await synthesizeAnswer(

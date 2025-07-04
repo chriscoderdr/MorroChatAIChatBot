@@ -102,9 +102,9 @@ WEATHER DATA:
 ${combinedOutput}
 
 INSTRUCTIONS:
-1.  Analyze the user's query to understand the language used.
+1.  Detect the language of the user's query.
 2.  Present the weather data comparison in a user-friendly format.
-3.  Your entire response should be in the same language as the user's query. For example, if the user asked in Spanish, you must respond in Spanish.
+3.  Your entire response should be in the same language as the user's query. If the language is undetectable, default to English.
 4.  Format the response using markdown for a clear and user-friendly presentation. Use headings, bold text, and lists.
 
 COMPARISON:`;
@@ -142,9 +142,9 @@ WEATHER DATA:
 ${result.output}
 
 INSTRUCTIONS:
-1.  Analyze the user's query to understand the language used.
+1.  Detect the language of the user's query.
 2.  Present the weather data in a user-friendly format.
-3.  Your entire response should be in the same language as the user's query. For example, if the user asked in Spanish, you must respond in Spanish.
+3.  Your entire response should be in the same language as the user's query. If the language is undetectable, default to English.
 4.  Format the response using markdown for a clear and user-friendly presentation. Use headings, bold text, and lists.
 
 RESPONSE:`;
@@ -170,10 +170,10 @@ USER'S QUERY: "${input}"
 ERROR: "I'm sorry, I couldn't get the weather information. Please try again with a specific location."
 
 INSTRUCTIONS:
-1.  Analyze the user's query to understand the language used.
+1.  Detect the language of the user's query.
 2.  Apologize for the error and explain that the weather information could not be retrieved.
 3.  Suggest trying again with a specific location.
-4.  Your entire response should be in the same language as the user's query.
+4.  Your entire response should be in the same language as the user's query. If the language is undetectable, default to English.
 
 RESPONSE:`;
         const finalResult = await callAgent('summarizer', errorPrompt, context);
