@@ -2,6 +2,7 @@ import React from 'react';
 import { ChatAvatar } from './chat-avatar';
 import { ChatBubble } from './chat-bubble';
 import { AiAgentBadge } from '../ui/ai-agent-badge';
+import { E2EEIndicator } from '../ui/e2ee-indicator';
 
 interface ChatMessageProps {
   message: {
@@ -39,23 +40,23 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message, isCodingRelat
     <div className={`flex flex-col gap-2 ${alignmentClass}`}>
       <div className={`flex items-start gap-3 ${alignmentClass}`}>
         {!message.isUser && <ChatAvatar />}
-        <ChatBubble 
-          message={message.text} 
-          isUser={message.isUser} 
-          isTyping={isTyping}
-          isError={isError}
-          isCodingRelated={isCodingRelated}
-          onRetry={isError ? onRetry : undefined}
-        />
-        {message.isUser && <ChatAvatar isUser />}
-      </div>
-      {isCodingResponse && (
-        <div className={`flex ${alignmentClass}`}>
-          <div className="ml-11">
-            <AiAgentBadge />
+        <div className="flex flex-col gap-1">
+          <ChatBubble 
+            message={message.text} 
+            isUser={message.isUser} 
+            isTyping={isTyping}
+            isError={isError}
+            isCodingRelated={isCodingRelated}
+            onRetry={isError ? onRetry : undefined}
+          />
+          {/* E2EE indicator below each message bubble */}
+          <div className="mt-1 flex items-center gap-2">
+            <E2EEIndicator className="shadow-none" tooltip="This message is end-to-end encrypted" />
+            {isCodingResponse && !message.isUser && <AiAgentBadge />}
           </div>
         </div>
-      )}
+        {message.isUser && <ChatAvatar isUser />}
+      </div>
     </div>
   );
 };

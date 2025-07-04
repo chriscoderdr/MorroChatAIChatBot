@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Header } from './components/layout/header';
+import { FAQModal } from './components/ui/faq-modal';
 import { Sidebar } from './components/layout/side-bar';
 import { useNewChatMutation } from './hooks/useNewChatMutation';
 import { ChatMessage } from './components/chat/chat-message';
@@ -13,20 +14,24 @@ import { useChatHistory } from './hooks/useChatHistory';
 import { formatPdfUploadMessage } from './utils/pdf-utils';
 import { isCodingRelated } from './utils/coding-detection';
 import { CodeFormattingGuide } from './components/ui/code-formatting-guide';
+import { PrivacyPolicyModal } from './components/ui/privacy-policy-modal';
 
-interface IMessage {
-  text: string;
-  isUser: boolean;
-  isError?: boolean;
-  messageId?: string; // To track messages for retries
-  isCodingRelated?: boolean; // To track if the message is coding-related
+interface FileUploadState {
+  fileName: string;
+  status: 'uploading' | 'failed' | 'retrying' | 'success' | null;
+  errorMessage?: string;
+  progress?: number;
+  file?: File;
+  message?: string;
 }
 
 function App() {
   const uploadPdfMutation = useUploadPdfMutation();
   const newChatMutation = useNewChatMutation();
   const [isCodeGuideOpen, setIsCodeGuideOpen] = useState(false);
-  
+  const [isFaqOpen, setIsFaqOpen] = useState(false);
+  const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
+
   // Initialize sidebar visibility state from localStorage, defaulting to true
   const [isSidebarVisible, setIsSidebarVisible] = useState(() => {
     try {
@@ -36,7 +41,7 @@ function App() {
       return true;
     }
   });
-  
+
   // Handler for toggling sidebar visibility with persistence
   const handleToggleSidebar = () => {
     setIsSidebarVisible((prev: boolean) => {
@@ -49,7 +54,7 @@ function App() {
       return newValue;
     });
   };
-  
+
   // Handler for starting a new chat session
   const handleNewChat = () => {
     setMessages([]); // Clear chat history
@@ -62,14 +67,7 @@ function App() {
   const [messages, setMessages] = useState<IMessage[]>([]);
   const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null);
   const [lastMessageWasCodingRelated, setLastMessageWasCodingRelated] = useState<boolean>(false);
-  const [fileUpload, setFileUpload] = useState<{
-    fileName: string;
-    status: 'uploading' | 'failed' | 'retrying' | 'success' | null;
-    errorMessage?: string;
-    progress?: number;
-    file?: File;
-    message?: string;
-  } | null>(null);
+  const [fileUpload, setFileUpload] = useState<FileUploadState | null>(null);
   const chatMutation = useChatMutation();
   const chatHistoryQuery = useChatHistory();
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -261,7 +259,12 @@ function App() {
           className="sticky top-0 z-20 bg-gradient-to-br from-gray-900 to-gray-800"
         >
           <div className="flex items-center justify-between px-4 py-2">
-            <Header onToggleSidebar={handleToggleSidebar} isSidebarVisible={isSidebarVisible} />
+            <Header 
+              onToggleSidebar={handleToggleSidebar} 
+              isSidebarVisible={isSidebarVisible}
+              onOpenFaq={() => setIsFaqOpen(true)}
+              onOpenPrivacy={() => setIsPrivacyOpen(true)}
+            />
             {/* Mobile New Chat button, hidden on sm and up */}
             <button
               className="sm:hidden ml-2 px-3 py-1 rounded bg-blue-600 text-white font-semibold text-sm shadow hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400"
@@ -344,6 +347,8 @@ function App() {
           isOpen={isCodeGuideOpen} 
           onClose={() => setIsCodeGuideOpen(false)} 
         />
+  <FAQModal open={isFaqOpen} onClose={() => setIsFaqOpen(false)} />
+  <PrivacyPolicyModal open={isPrivacyOpen} onClose={() => setIsPrivacyOpen(false)} />
       </div>
     </div>
   );

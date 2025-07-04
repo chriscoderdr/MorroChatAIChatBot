@@ -14,10 +14,10 @@ export class NastyScoreService {
     return user ? user.score : 0;
   }
 
-  async incrementScore(userId: string): Promise<number> {
+  async incrementScore(userId: string, amount = 1): Promise<number> {
     const user = await this.nastyScoreModel.findOneAndUpdate(
       { userId },
-      { $inc: { score: 1 } },
+      { $inc: { score: amount } },
       { new: true, upsert: true },
     );
     return user.score;
