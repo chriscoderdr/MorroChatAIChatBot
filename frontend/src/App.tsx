@@ -14,6 +14,7 @@ import { useUploadPdfMutation } from './hooks/useUploadPdfMutation';
 import { useChatHistory } from './hooks/useChatHistory';
 import { formatPdfUploadMessage } from './utils/pdf-utils';
 import { isCodingRelated } from './utils/coding-detection';
+import type { IMessage } from './models/IMessage';
 import { CodeFormattingGuide } from './components/ui/code-formatting-guide';
 import { PrivacyPolicyModal } from './components/ui/privacy-policy-modal';
 

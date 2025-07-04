@@ -1,10 +1,8 @@
 
-import React, { useState } from 'react';
+import React from 'react';
 import { Menu, HelpCircle } from 'lucide-react';
 import MorroLogo from '../../assets/morro-logo.svg';
 import { E2EEIndicator } from '../ui/e2ee-indicator';
-import { PrivacyPolicyModal } from '../ui/privacy-policy-modal';
-import { FAQModal } from '../ui/faq-modal';
 
 
 type HeaderProps = {
