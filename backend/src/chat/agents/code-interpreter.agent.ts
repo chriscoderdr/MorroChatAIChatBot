@@ -303,7 +303,7 @@ export class CodeInterpreterAgent implements Agent {
         // Call web_search agent for external information
         const searchQuery = buildSearchQuery(question, codeAnalysis);
         const searchResult = await callAgent(
-          'web_search',
+          'search',
           searchQuery,
           context,
         );
