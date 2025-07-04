@@ -1,4 +1,4 @@
-import React, { useState, forwardRef } from 'react';
+import React, { useState, useEffect, forwardRef } from 'react';
 import { FileUpload } from './file-upload';
 
 interface ChatInputProps {
@@ -10,11 +10,23 @@ export const ChatInput = forwardRef<HTMLDivElement, ChatInputProps>(({ onSendMes
     const [input, setInput] = useState('');
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
+    // Draft: Load on mount
+    useEffect(() => {
+        const savedDraft = localStorage.getItem('chat_draft');
+        if (savedDraft) setInput(savedDraft);
+    }, []);
+
+    // Draft: Save on input change
+    useEffect(() => {
+        localStorage.setItem('chat_draft', input);
+    }, [input]);
+
     const handleSend = () => {
         if ((input.trim() || selectedFile) && !isLoading) {
             onSendMessage(input.trim(), selectedFile);
             setInput('');
             setSelectedFile(null);
+            localStorage.removeItem('chat_draft');
         }
     };
 

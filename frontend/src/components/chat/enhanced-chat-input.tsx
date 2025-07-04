@@ -47,12 +47,28 @@ export const EnhancedChatInput = forwardRef<HTMLDivElement, EnhancedChatInputPro
         }
     }, [input]);
 
+    // Draft: Load on mount
+    useEffect(() => {
+        const savedDraft = localStorage.getItem('chat_draft');
+        if (savedDraft) setInput(savedDraft);
+    }, []);
+
+    // Draft: Save on input change
+    useEffect(() => {
+        if (input.trim() === '') {
+            localStorage.removeItem('chat_draft');
+        } else {
+            localStorage.setItem('chat_draft', input);
+        }
+    }, [input]);
+
     const handleSend = () => {
         if ((input.trim() || selectedFile) && !isLoading) {
             onSendMessage(input.trim(), selectedFile);
             setInput('');
             setSelectedFile(null);
             setShowPreview(false);
+            localStorage.removeItem('chat_draft');
         }
     };
 
