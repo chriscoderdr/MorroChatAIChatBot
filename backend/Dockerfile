@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---- Build Stage ----
-FROM node:20-slim AS builder
+FROM node:22-slim AS builder
 WORKDIR /app
 COPY package*.json ./
 RUN --mount=type=cache,target=/root/.npm \
@@ -15,7 +15,7 @@ RUN npm run build
 RUN npm prune --production
 
 # ---- Production Stage ----
-FROM node:20-slim
+FROM node:22-slim
 WORKDIR /app
 # Install dynamic linker for onnxruntime-node (multi-arch: works for x86_64 and arm64)
 RUN apt-get update && apt-get install -y libc6 && rm -rf /var/lib/apt/lists/*
