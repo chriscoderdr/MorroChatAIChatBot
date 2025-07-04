@@ -1,21 +1,22 @@
 import { TestingModule } from '@nestjs/testing';
 import { Connection } from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
-import { ChatController } from '../controllers/chat.controller';
-import { ChatSessionRepository } from '../repositories/chat-session.repository';
-import { AgentOrchestrator } from '../agent-orchestrator';
+import { ChatController } from '../../src/chat/controllers/chat.controller';
+import { ChatSessionRepository } from '../../src/chat/repositories/chat-session.repository';
+import { AgentOrchestrator } from '../../src/chat/agent-orchestrator';
 import { setupTestModule } from './test-helpers';
-import { AgentRegistry } from '../agent-registry';
-import { AgentName } from '../types';
-import '../document-search.agent';
-import '../summarizer.agent';
-import '../research.agent';
-import '../weather.agent';
-import '../code-interpreter.agent';
-import '../code-optimization.agent';
-import '../general.agent';
-import '../routing.agent';
-import '../subject-inference.agent';
+import { AgentRegistry } from '../../src/chat/agent-registry';
+import { AgentName } from '../../src/chat/types';
+import '../../src/chat/agents/document-search.agent';
+import '../../src/chat/agents/summarizer.agent';
+import '../../src/chat/agents/research.agent';
+import '../../src/chat/agents/weather.agent';
+import '../../src/chat/agents/code-interpreter.agent';
+import '../../src/chat/agents/code-optimization.agent';
+import '../../src/chat/agents/general.agent';
+import '../../src/chat/agents/routing.agent';
+import '../../src/chat/agents/subject-inference.agent';
+import { agents } from '../../src/chat/agents.providers';
 
 // Mock external fetch
 global.fetch = jest.fn();

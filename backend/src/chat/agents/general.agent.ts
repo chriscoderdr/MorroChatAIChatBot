@@ -1,4 +1,4 @@
-import { Agent, AgentName } from './types';
+import { Agent, AgentName } from '../types';
 import { BaseMessage } from '@langchain/core/messages';
 
 export class GeneralAgent implements Agent {

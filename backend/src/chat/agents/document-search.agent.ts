@@ -1,5 +1,5 @@
 // document-search.agent.ts
-import { Agent, AgentName } from './types';
+import { Agent, AgentName } from '../types';
 import { ChromaClient } from 'chromadb';
 import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai';
 import { Logger } from '@nestjs/common';

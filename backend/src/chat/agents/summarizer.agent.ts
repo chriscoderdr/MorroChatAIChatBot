@@ -1,5 +1,5 @@
 // summarizer.agent.ts - LLM-powered summarization and text analysis agent
-import { Agent, AgentName } from './types';
+import { Agent, AgentName } from '../types';
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 
 export class SummarizerAgent implements Agent {

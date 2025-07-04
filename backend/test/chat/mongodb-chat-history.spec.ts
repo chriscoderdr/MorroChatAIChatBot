@@ -1,14 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
-import appConfig from '../../config/app.config';
-import aiConfig from '../../config/ai.config';
-import databaseConfig from '../../config/database.config';
-import throttleConfig from '../../config/throttle.config';
-import { ChatModule } from '../chat.module';
-import { MongoDBChatMessageHistory } from '../services/mongodb.chat.message.history';
+import appConfig from '../../src/config/app.config';
+import aiConfig from '../../src/config/ai.config';
+import databaseConfig from '../../src/config/database.config';
+import throttleConfig from '../../src/config/throttle.config';
+import { ChatModule } from '../../src/chat/chat.module';
+import { MongoDBChatMessageHistory } from '../../src/chat/services/mongodb.chat.message.history';
 import { AIMessage, HumanMessage } from '@langchain/core/messages';
-import { ChatSession, ChatSessionSchema } from '../schemas/chat-session.schema';
+import { ChatSession, ChatSessionSchema } from '../../src/chat/schemas/chat-session.schema';
 import { Model } from 'mongoose';
 
 describe('MongoDB Chat Message History', () => {

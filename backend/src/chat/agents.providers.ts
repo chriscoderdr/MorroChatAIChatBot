@@ -1,15 +1,15 @@
 import { Provider } from '@nestjs/common';
 import { AgentRegistry } from './agent-registry';
-import { SummarizerAgent } from './summarizer.agent';
-import { ResearchAgent } from './research.agent';
-import { CodeInterpreterAgent } from './code-interpreter.agent';
-import { CodeOptimizationAgent } from './code-optimization.agent';
-import { WeatherAgent } from './weather.agent';
-import { RoutingAgent } from './routing.agent';
-import { SubjectInferenceAgent } from './subject-inference.agent';
-import { DocumentSearchAgent } from './document-search.agent';
-import { GeneralAgent } from './general.agent';
-import { TimeAgent } from './time.agent';
+import { SummarizerAgent } from './agents/summarizer.agent';
+import { ResearchAgent } from './agents/research.agent';
+import { CodeInterpreterAgent } from './agents/code-interpreter.agent';
+import { CodeOptimizationAgent } from './agents/code-optimization.agent';
+import { WeatherAgent } from './agents/weather.agent';
+import { RoutingAgent } from './agents/routing.agent';
+import { SubjectInferenceAgent } from './agents/subject-inference.agent';
+import { DocumentSearchAgent } from './agents/document-search.agent';
+import { GeneralAgent } from './agents/general.agent';
+import { TimeAgent } from './agents/time.agent';
 
 const agentProviders: Provider[] = [
   SummarizerAgent,

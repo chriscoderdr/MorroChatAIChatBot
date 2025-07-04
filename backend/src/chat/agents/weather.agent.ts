@@ -1,4 +1,4 @@
-import { Agent, AgentName } from './types';
+import { Agent, AgentName } from '../types';
 import { Logger } from '@nestjs/common';
 
 // Create a dedicated weather agent that uses the open_weather_map tool correctly

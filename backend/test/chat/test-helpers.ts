@@ -3,20 +3,24 @@ import { ConfigService } from '@nestjs/config';
 import { getModelToken, MongooseModule } from '@nestjs/mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { Connection, connect, Model } from 'mongoose';
-import { LlmService } from '../../llm/llm.service';
-import { ChromaService } from '../services/chroma.service';
-import { ChatSession, ChatSessionSchema } from '../schemas/chat-session.schema';
-import { ChatController } from '../controllers/chat.controller';
-import { ChatService } from '../services/chat.service';
-import { ChatSessionRepository } from '../repositories/chat-session.repository';
-import { SessionCacheService } from '../services/session-cache.service';
-import { PdfVectorService } from '../services/pdf-vector.service';
-import { PdfRetrievalService } from '../services/pdf-retrieval.service';
-import { ChatUploadController } from '../controllers/chat-upload.controller';
-import { AgentRegistry } from '../agent-registry';
-import { AgentOrchestrator } from '../agent-orchestrator';
-import { LangChainService } from '../services/langchain.service';
-import { LlmServiceMock } from '../../llm/llm.service.mock';
+import { LlmService } from '../../src/llm/llm.service';
+import { ChromaService } from '../../src/chat/services/chroma.service';
+import {
+  ChatSession,
+  ChatSessionSchema,
+} from '../../src/chat/schemas/chat-session.schema';
+import { ChatController } from '../../src/chat/controllers/chat.controller';
+import { ChatService } from '../../src/chat/services/chat.service';
+import { ChatSessionRepository } from '../../src/chat/repositories/chat-session.repository';
+import { SessionCacheService } from '../../src/chat/services/session-cache.service';
+import { PdfVectorService } from '../../src/chat/services/pdf-vector.service';
+import { PdfRetrievalService } from '../../src/chat/services/pdf-retrieval.service';
+import { ChatUploadController } from '../../src/chat/controllers/chat-upload.controller';
+import { AgentRegistry } from '../../src/chat/agent-registry';
+import { AgentOrchestrator } from '../../src/chat/agent-orchestrator';
+import { LangChainService } from '../../src/chat/services/langchain.service';
+import { LlmServiceMock } from '../llm.service.mock';
+import { agents } from '../../src/chat/agents.providers';
 
 // Centralized setup for integration tests
 export async function setupTestModule() {
@@ -69,6 +73,7 @@ export async function setupTestModule() {
         provide: LlmService,
         useClass: LlmServiceMock,
       },
+      ...agents,
     ],
   }).compile();
 

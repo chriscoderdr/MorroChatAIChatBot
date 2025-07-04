@@ -1,4 +1,4 @@
-import { Agent, AgentName } from './types';
+import { Agent, AgentName } from '../types';
 
 // Helper interfaces for code analysis
 interface CodeAnalysis {

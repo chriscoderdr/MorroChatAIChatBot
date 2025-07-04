@@ -1,5 +1,5 @@
 // code-optimization.agent.ts
-import { Agent, AgentName } from './types';
+import { Agent, AgentName } from '../types';
 
 const detectLanguage = async (text: string, llm: any): Promise<string> => {
   const prompt = `Detect the language of this text. Respond with only the language name (e.g., "Spanish", "English").\n\nText: "${text}"`;

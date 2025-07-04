@@ -1,4 +1,4 @@
-import { Agent, AgentName } from './types';
+import { Agent, AgentName } from '../types';
 import { Logger } from '@nestjs/common';
 import { ChatOpenAI } from '@langchain/openai';
 import { BaseMessage } from '@langchain/core/messages';

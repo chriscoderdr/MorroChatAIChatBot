@@ -1,4 +1,4 @@
-import { Agent, AgentName } from './types';
+import { Agent, AgentName } from '../types';
 import { Logger } from '@nestjs/common';
 
 // Create a dedicated time agent that uses the current_time tool correctly

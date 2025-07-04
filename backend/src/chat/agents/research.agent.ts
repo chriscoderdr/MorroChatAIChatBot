@@ -1,5 +1,5 @@
 // research.agent.ts - A self-contained, intelligent research agent
-import { Agent, AgentName } from './types';
+import { Agent, AgentName } from '../types';
 import { Logger } from '@nestjs/common';
 import { ChatOpenAI } from '@langchain/openai';
 
