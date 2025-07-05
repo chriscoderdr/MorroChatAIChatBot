@@ -1,6 +1,6 @@
 import { Agent, AgentName } from '../types';
-
 import { LanguageManager } from '../utils/language-utils';
+import { ResponseFormatter } from '../utils/response-utils';
 
 // Helper interfaces for code analysis
 interface CodeAnalysis {
@@ -271,19 +271,19 @@ export class CodeInterpreterAgent implements Agent {
       }
 
       if (codeBlocks.length === 0) {
-        return {
-          output:
-            'No code blocks found in your input or recent history. Please provide code using triple backticks (```) format.',
-          confidence: 0.2,
-        };
+        return ResponseFormatter.formatErrorResponse(
+          'No code blocks found in your input or recent history. Please provide code using triple backticks (```) format.',
+          context,
+          'code_interpreter'
+        );
       }
 
       if (!question) {
-        return {
-          output:
-            'Please provide a specific question about the code you submitted.',
-          confidence: 0.2,
-        };
+        return ResponseFormatter.formatErrorResponse(
+          'Please provide a specific question about the code you submitted.',
+          context,
+          'code_interpreter'
+        );
       }
 
       // Step 1: Analyze the code
@@ -297,7 +297,11 @@ export class CodeInterpreterAgent implements Agent {
 
       if (question.toLowerCase().includes('optimize')) {
         if (!callAgent) {
-          throw new Error('callAgent is not available');
+          return ResponseFormatter.formatErrorResponse(
+            'Code optimization service is not available.',
+            context,
+            'code_interpreter'
+          );
         }
         return callAgent('code_optimization', input, context);
       }
@@ -307,7 +311,11 @@ export class CodeInterpreterAgent implements Agent {
 
       if (needsExternalContext.web) {
         if (!callAgent) {
-          throw new Error('callAgent is not available');
+          return ResponseFormatter.formatErrorResponse(
+            'Web search service is not available.',
+            context,
+            'code_interpreter'
+          );
         }
         // Call web_search agent for external information
         const searchQuery = buildSearchQuery(question, codeAnalysis);
@@ -359,11 +367,11 @@ export class CodeInterpreterAgent implements Agent {
       const questionLanguage = await detectLanguage(question, context.llm);
 
       if (questionLanguage === 'Nonsense') {
-        return {
-          output:
-            "I'm sorry, I didn't understand your request. Could you please rephrase it?",
-          confidence: 0.3,
-        };
+        return ResponseFormatter.formatErrorResponse(
+          "I'm sorry, I didn't understand your request. Could you please rephrase it?",
+          context,
+          'code_interpreter'
+        );
       }
 
   // Step 3: Combine code analysis and search results for final answer
@@ -382,15 +390,16 @@ export class CodeInterpreterAgent implements Agent {
         ? codeConfidence * 0.6 + searchConfidence * 0.4
         : codeConfidence;
 
-      return {
-        output: finalAnswer,
-        confidence: Math.min(0.95, combinedConfidence),
-      };
+      return ResponseFormatter.formatAgentResponse(
+        finalAnswer,
+        Math.min(0.95, combinedConfidence)
+      );
     } catch (error: any) {
-      return {
-        output: `Code analysis failed: ${error.message}`,
-        confidence: 0.1,
-      };
+      return ResponseFormatter.formatErrorResponse(
+        `Code analysis failed: ${error.message}`,
+        context,
+        'code_interpreter'
+      );
     }
   }
 }

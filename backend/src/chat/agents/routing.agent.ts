@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { ChatOpenAI } from '@langchain/openai';
 import { BaseMessage } from '@langchain/core/messages';
+import { ResponseFormatter } from '../utils/response-utils';
 
 // Helper method to check if documents are available in chat context
 const hasDocumentContext = (context: AgentContext): boolean => {
@@ -148,17 +149,10 @@ DO NOT WRITE ANY OTHER TEXT. ONLY JSON.`;
 
       logger.log(`Routing agent raw LLM response: ${output}`);
 
-      return { output, confidence: 0.9 };
+      return ResponseFormatter.formatAgentResponse(output, 0.9);
     } catch (error: any) {
       logger.error(`Error in routing agent: ${error.message}`, error.stack);
-      return {
-        output: JSON.stringify({
-          error: 'routing_failed',
-          message: error.message,
-          fallback: true,
-        }),
-        confidence: 0.0,
-      };
+      return ResponseFormatter.formatErrorResponse(error, context, 'routing');
     }
   }
 }

@@ -3,6 +3,7 @@ import { Agent, AgentName } from '../types';
 import { Logger } from '@nestjs/common';
 import { ChatOpenAI } from '@langchain/openai';
 import { LanguageManager } from '../utils/language-utils';
+import { ResponseFormatter } from '../utils/response-utils';
 
 const logger = new Logger('ResearchAgent');
 
@@ -20,12 +21,12 @@ export class ResearchAgent implements Agent {
     let questionLanguage = 'English'; // Default language
 
     if (!callAgent) {
-      throw new Error('callAgent is not available');
+      return ResponseFormatter.formatErrorResponse('callAgent is not available', context, 'research');
     }
 
     const llm = context.llm as ChatOpenAI;
     if (!llm) {
-      return { output: 'Research failed: LLM not available.', confidence: 0.1 };
+      return ResponseFormatter.formatErrorResponse('Research failed: LLM not available.', context, 'research');
     }
     const boundLLMForJson = llm.bind({
       response_format: { type: 'json_object' },
@@ -175,7 +176,7 @@ ${historyText}
 
         if (analysis.nextAction === 'FINISH') {
           logger.log('Research complete. Returning final answer.');
-          return { output: analysis.nextQueryOrFinalAnswer, confidence: 0.98 };
+          return ResponseFormatter.formatAgentResponse(analysis.nextQueryOrFinalAnswer, 0.98);
         } else if (analysis.nextAction === 'SEARCH') {
           // The next query can be a simple string or a structured object
           // including sites to exclude.
@@ -193,10 +194,10 @@ ${historyText}
         );
         // If parsing fails, try to return the last known good information as a fallback.
         const lastGoodResult = researchHistory.slice(-1)[0]?.results;
-        return {
-          output: `I encountered an issue with my research process, but here is the last information I found: ${lastGoodResult}`,
-          confidence: 0.4,
-        };
+        return ResponseFormatter.formatAgentResponse(
+          `I encountered an issue with my research process, but here is the last information I found: ${lastGoodResult}`,
+          0.4
+        );
       }
     }
 
@@ -242,9 +243,6 @@ ${historyText}
     const finalSummaryResult = await llm.invoke(finalSummaryPrompt);
     const finalAnswer = finalSummaryResult.content.toString();
 
-    return {
-      output: finalAnswer,
-      confidence: 0.6, // Confidence is a bit higher because it's a summarized answer
-    };
+    return ResponseFormatter.formatAgentResponse(finalAnswer, 0.6, true); // Clean up any metadata that might be in the summary
   }
 }
