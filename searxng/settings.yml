@@ -39,7 +39,7 @@ engines:
     shortcut: "sp"
     categories:
       - "general"
-    disabled: false
+    disabled: true
   - name: "google"
     engine: "google"
     shortcut: "go"
