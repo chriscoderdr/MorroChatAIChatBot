@@ -39,36 +39,65 @@ export const createSearchTool = (
 
       // Priority: SearxNG -> Brave -> Tavily -> Public SearxNG fallback
       if (searxngBaseUrl) {
-        logger.log(`Using SearxNG for web search with query: ${fullQuery}`);
+        logger.log(`Attempting SearxNG search at ${searxngBaseUrl}`);
+        logger.log(`Full query: ${fullQuery}`);
         const url = new URL(searxngBaseUrl);
         url.searchParams.append('q', fullQuery);
         url.searchParams.append('format', 'json');
+        logger.log(`Making request to: ${url.toString()}`);
+        
         try {
           const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+          const timeout = setTimeout(() => {
+            controller.abort();
+            logger.warn('SearxNG request timed out after 30 seconds - might be due to Tor routing');
+          }, 30000); // Increased timeout for Tor routing
 
+          logger.log('Initiating fetch request to SearxNG (via Tor)...');
           const response = await fetch(url.toString(), {
             headers: {
               Accept: 'application/json',
+              'User-Agent': 'MorroChatBot/1.0',
             },
             signal: controller.signal
           }).finally(() => clearTimeout(timeout));
 
+          logger.log(`SearxNG response status: ${response.status} ${response.statusText}`);
+          logger.log(`Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`);
+          
           if (!response.ok) {
             const errorBody = await response.text();
             logger.error(
-              `SearxNG request failed with status ${response.status} for query: ${fullQuery}. Body: ${errorBody}`,
+              `SearxNG request failed with status ${response.status} for query: ${fullQuery}.\nResponse headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}\nBody: ${errorBody}`,
             );
             throw new Error(`SearxNG returned error status ${response.status}`);
           }
+          
           const responseText = await response.text();
+          logger.log(`Raw response received (first 200 chars): ${responseText.substring(0, 200)}...`);
+          
           try {
+            logger.log('Attempting to parse JSON response...');
             const json = JSON.parse(responseText);
+            
+            // Check for engine timeouts
+            if (json.unresponsive_engines && json.unresponsive_engines.length > 0) {
+              const timeouts = json.unresponsive_engines.filter(([_, reason]) => reason === 'timeout');
+              if (timeouts.length > 0) {
+                logger.warn(`SearxNG engines timed out: ${timeouts.map(([engine]) => engine).join(', ')}`);
+              }
+            }
+
             if (json.results && json.results.length > 0) {
               return JSON.stringify(json.results);
             }
-            // If no results, let it fall through to next search provider
-            logger.warn(`SearxNG returned no results for query: ${fullQuery}, trying next provider`);
+            
+            // Log more details about the empty response
+            logger.warn(
+              `SearxNG returned no results for query: ${fullQuery}\n` +
+              `Total engines failed: ${json.unresponsive_engines?.length || 0}\n` +
+              `Response: ${JSON.stringify(json, null, 2)}`
+            );
             throw new Error('No results from SearxNG');
           } catch (e) {
             logger.error(
@@ -77,10 +106,17 @@ export const createSearchTool = (
             throw new Error('Invalid JSON response from SearxNG');
           }
         } catch (e) {
-          logger.error(
-            `SearxNG search failed for query: ${fullQuery}`,
-            e.stack,
-          );
+          if (e.name === 'AbortError') {
+            logger.error(`SearxNG request timed out for query: ${fullQuery}`);
+          } else if (e.name === 'TypeError' && e.message.includes('fetch failed')) {
+            logger.error(
+              `Network error connecting to SearxNG at ${url.toString()}\nError: ${e.message}\nStack: ${e.stack}`,
+            );
+          } else {
+            logger.error(
+              `SearxNG search failed for query: ${fullQuery}\nError Type: ${e.name}\nMessage: ${e.message}\nStack: ${e.stack}`,
+            );
+          }
           // Don't return error here, let it fall through to next provider
         }
       } else if (braveApiKey) {

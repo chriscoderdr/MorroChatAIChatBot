@@ -28,6 +28,20 @@ services:
     image: dperson/torproxy
     container_name: morrochat-tor
     restart: unless-stopped
+    environment:
+      - TOR_MaxCircuitDirtiness=60
+      - TOR_NewCircuitPeriod=30
+      - TOR_MaxCircuitDirtiness=600
+      - TZ=UTC
+    expose:
+      - "8118" # HTTP proxy
+      - "9050" # SOCKS5 proxy
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 8118 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - morrochat-network
 
@@ -58,6 +72,7 @@ services:
       MONGODB_URI: mongodb://root:example@mongo:27017/morrochat?authSource=admin
       NODE_ENV: production
       CHROMA_URL: http://chromadb:8000
+      SEARXNG_BASE_URL: http://searxng:8080
     depends_on:
       - mongo
       - chromadb
@@ -76,14 +91,24 @@ services:
     ports:
       - "8888:8080"
     environment:
-      - SEARXNG_BASEURL=http://localhost:8888/
-      - INSTANCE_NAME="morrochat-searxng"
+      - SEARXNG_BASEURL=http://searxng:8080/
+      - INSTANCE_NAME=morrochat-searxng
+      - SEARXNG_HOSTNAME=0.0.0.0
+      - SEARXNG_REQUEST_TIMEOUT=60
+      - SEARXNG_CONNECT_TIMEOUT=30
+      - SEARXNG_RESULTS_PER_PAGE=10
+      - SEARXNG_LIMITER=false
       - SEARXNG_REDIS_URL=redis://redis:6379/0
+      - SEARXNG_OUTGOING_HTTP_PROXY=http://tor:8118
+      - SEARXNG_OUTGOING_HTTPS_PROXY=http://tor:8118
       - http_proxy=http://tor:8118
       - https_proxy=http://tor:8118
+      - no_proxy=localhost,127.0.0.1
     depends_on:
-      - redis
-      - tor
+      redis:
+        condition: service_started
+      tor:
+        condition: service_healthy
     networks:
       - morrochat-network
 
