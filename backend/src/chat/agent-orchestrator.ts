@@ -1,6 +1,7 @@
 // agent-orchestrator.ts
 import { AgentRegistry } from './agent-registry';
 import { AgentContext, AgentResult, AgentName } from './types';
+import { LanguageManager } from './utils/language-utils';
 
 export class AgentOrchestrator {
   // Run agents in parallel and return all results
@@ -212,11 +213,37 @@ export class AgentOrchestrator {
       if (nastyScoreService && userId) {
         const score = await nastyScoreService.getScore(userId);
         if (score >= 5) {
+          // Check for existing block message in DB
+          const { blockMessage, blockLanguage } = await nastyScoreService.getBlockMessage(userId);
+          let finalBlockMessage = blockMessage;
+          if (!finalBlockMessage) {
+            // Generate block message in user's language using LLM and our utility
+            finalBlockMessage = 'You have been blocked due to repeated inappropriate language.';
+            let detectedLanguage = 'English';
+            
+            if (context.llm && input) {
+              try {
+                // Use our centralized language utilities
+                const languageContext = await LanguageManager.getLanguageContext(input, context.llm, 'strict');
+                detectedLanguage = languageContext.language;
+                
+                const blockPrompt = `You are an AI moderator. ${languageContext.instructions}\n\nInform the user that they have been blocked due to repeated inappropriate language. Be clear, direct, and final.`;
+                const blockResult = await context.llm.invoke(`${blockPrompt}\n\nUser's last message: "${input}"`);
+                
+                if (blockResult && blockResult.content) {
+                  finalBlockMessage = blockResult.content.toString();
+                }
+              } catch (e) {
+                // fallback to English
+              }
+            }
+            // Store block message and language in DB
+            await nastyScoreService.setBlockMessage(userId, finalBlockMessage, detectedLanguage);
+          }
           return {
             agent: 'nasty_score_block',
             result: {
-              output:
-                'You have been blocked due to repeated inappropriate language.',
+              output: finalBlockMessage,
               confidence: 1.0,
             },
             all: {},
@@ -230,15 +257,10 @@ export class AgentOrchestrator {
         context,
       );
       if (profanityCheck.confidence === 1.0) {
-        if (nastyScoreService && userId) {
-          await nastyScoreService.incrementScore(userId);
-        }
+        // ProfanityCheckAgent already increments the nasty score and returns the creative response
         return {
           agent: 'profanity_check',
-          result: {
-            output: profanityCheck.output, // The output is now the creative response
-            confidence: 1.0,
-          },
+          result: profanityCheck,
           all: { profanity_check: profanityCheck },
         };
       }
@@ -247,11 +269,26 @@ export class AgentOrchestrator {
       if (nonsenseScoreService && userId) {
         const score = await nonsenseScoreService.getScore(userId);
         if (score >= 5) {
+          // Generate nonsense block message in user's language using LLM
+          let nonsenseBlockMessage = 'You have been blocked due to repeated nonsensical input.';
+          if (context.llm && input) {
+            try {
+              // Use our centralized language utilities
+              const languageContext = await LanguageManager.getLanguageContext(input, context.llm, 'strict');
+              
+              const blockPrompt = `You are an AI moderator. ${languageContext.instructions}\n\nInform the user that they have been blocked due to repeatedly sending nonsensical messages. Be clear, direct, and final.`;
+              const blockResult = await context.llm.invoke(`${blockPrompt}\n\nUser's last message: "${input}"`);
+              if (blockResult && blockResult.content) {
+                nonsenseBlockMessage = blockResult.content.toString();
+              }
+            } catch (e) {
+              // fallback to English
+            }
+          }
           return {
             agent: 'nonsense_block',
             result: {
-              output:
-                'You have been blocked due to repeated nonsensical input.',
+              output: nonsenseBlockMessage,
               confidence: 1.0,
             },
             all: {},

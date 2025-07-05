@@ -1,4 +1,5 @@
 import { Agent, AgentName, AgentResult } from '../types';
+import { LanguageManager } from '../utils/language-utils';
 
 export class ProfanityCheckAgent implements Agent {
   public name: AgentName = 'profanity_check';
@@ -10,7 +11,16 @@ export class ProfanityCheckAgent implements Agent {
   }
 
   public async handle(input: string, context: any): Promise<AgentResult> {
-    const profanityCheckPrompt = `Analyze the following text for profanity, insults, or offensive language. Respond with a single JSON object with two keys: "isProfane" (a boolean) and "profanityLevel" (a string: "mild", "moderate", or "severe").
+    const profanityCheckPrompt = `Analyze the following text for profanity, insults, or offensive language, with these important exceptions:
+
+IMPORTANT EXCEPTIONS - These are NOT profanity:
+- "MorroChat", "Morro" - These are proper names referring to this chat agent
+- Any variations or references to "Morro" when used as part of this agent's name
+- Casual greetings like "sup", "hey", etc. are not considered profanity
+
+Respond with a single JSON object with two keys:
+- "isProfane" (a boolean)
+- "profanityLevel" (a number from 0 to 10, where 0 means no profanity and 10 means extremely severe profanity)
 
 Text: "${input}"`;
 
@@ -33,15 +43,17 @@ Text: "${input}"`;
       };
     }
 
+
     if (response.isProfane) {
-      const profanityLevel = response.profanityLevel || 'mild';
+      const profanityLevel = typeof response.profanityLevel === 'number' ? response.profanityLevel : 1;
       const { nastyScoreService, userId } = context;
 
       if (nastyScoreService && userId) {
+        // Increment by 1 for low, 2 for medium, 3 for high
         let amount = 1;
-        if (profanityLevel === 'moderate') {
+        if (profanityLevel >= 4 && profanityLevel < 7) {
           amount = 2;
-        } else if (profanityLevel === 'severe') {
+        } else if (profanityLevel >= 7) {
           amount = 3;
         }
         nastyScoreService.incrementScore(userId, amount);
@@ -53,15 +65,36 @@ Text: "${input}"`;
         .map((msg) => `${msg._getType()}: ${msg.content}`)
         .join('\n');
 
-      const creativeResponsePrompt = `The user's latest message contains profanity: "${input}". The profanity level is "${profanityLevel}".
+      // Use centralized language detection and enforcement
+      let languageInstructions = '';
+      
+      if (context.llm) {
+        try {
+          const languageContext = await LanguageManager.getLanguageContext(input, context.llm, 'strict');
+          languageInstructions = languageContext.instructions;
+        } catch (e) {
+          // fallback to basic instructions if language detection fails
+          languageInstructions = 'Please respond in the same language as the user query.';
+        }
+      }
+      
+      const creativeResponsePrompt = `The user's message "${input}" has been flagged with profanity level ${profanityLevel} (scale 0-10).
 
-Your task is to respond in a way that is creative, witty, and directly acknowledges the user's language without being preachy or repetitive. The response should be appropriate for the profanity level.
+IMPORTANT: If this was flagged only because of informal language or slang, respond naturally and friendly instead of with sarcasm.
+REMEMBER: "Morro", "MorroChat", or any variations are my name and should be treated as friendly terms.
 
-- For "mild" profanity, you could say something like: "Easy there, let's keep the conversation friendly." or "I understand you're frustrated, but let's try to use more positive language."
-- For "moderate" profanity, you might say: "I'd appreciate it if you'd avoid that kind of language. I'm here to help, but let's keep it respectful." or "That language isn't necessary. Let's focus on the issue at hand."
-- For "severe" profanity, a firm response is needed: "I won't continue this conversation if you use that language. Please be respectful, or I'll have to end this chat." or "This conversation is over if you continue to use that language."
+${languageInstructions}
 
-You must not use the same response twice, even if the user repeats themselves. Do not use the same opening phrase (e.g., "Whoa there, partner."). Your response must be completely different from the previous ones in the chat history.
+Your task is to:
+1. For actual profanity: Respond with wit and creative flair, being playful but never mean-spirited
+2. For informal language/slang: Respond naturally and conversationally
+3. For my name or variants: Respond warmly as it's part of my identity
+
+You can be witty and clever, but stay friendly unless dealing with actual offensive content.
+
+The response should directly acknowledge the user's language and the level of profanity, and should be totally different from anything previously said in the chat history. Do not use the same opening phrase or structure as before. Surprise the user with your originality.
+
+You may use pop culture references, clever wordplay, or creative metaphors. If the user's profanity is especially high (7-10), your sarcasm and burn can be even more intense, but still not truly offensive.
 
 Use the chat history to see what has been said before and ensure your response is fresh and unique.
 
@@ -69,7 +102,7 @@ Use the chat history to see what has been said before and ensure your response i
 ${chatHistory}
 </history>
 
-Now, generate a new, creative response to the user's message: "${input}"
+Now, generate a new, creative, and maximally sarcastic response to the user's message: "${input}"
 `;
 
       const creativeResult = await context.llm.invoke(creativeResponsePrompt, {

@@ -9,9 +9,26 @@ export class NastyScoreService {
     @InjectModel(NastyScore.name) private nastyScoreModel: Model<NastyScore>,
   ) {}
 
+
   async getScore(userId: string): Promise<number> {
     const user = await this.nastyScoreModel.findOne({ userId }).exec();
     return user ? user.score : 0;
+  }
+
+  async getBlockMessage(userId: string): Promise<{ blockMessage: string | null, blockLanguage: string | null }> {
+    const user = await this.nastyScoreModel.findOne({ userId }).exec();
+    return {
+      blockMessage: user?.blockMessage ?? null,
+      blockLanguage: user?.blockLanguage ?? null,
+    };
+  }
+
+  async setBlockMessage(userId: string, blockMessage: string, blockLanguage: string): Promise<void> {
+    await this.nastyScoreModel.findOneAndUpdate(
+      { userId },
+      { blockMessage, blockLanguage },
+      { new: true, upsert: true },
+    ).exec();
   }
 
   async incrementScore(userId: string, amount = 1): Promise<number> {

@@ -1,16 +1,6 @@
 // code-optimization.agent.ts
 import { Agent, AgentName } from '../types';
-
-const detectLanguage = async (text: string, llm: any): Promise<string> => {
-  const prompt = `Detect the language of this text. If the text is nonsensical or a mix of random characters, respond with "Nonsense". Otherwise, respond with only the language name (e.g., "Spanish", "English", "French"). If you cannot determine the language, default to "English".\n\nText: "${text}"`;
-  const result = await llm.invoke(prompt);
-  const detectedLanguage =
-    typeof result.content === 'string' ? result.content.trim() : 'English';
-  if (detectedLanguage.toLowerCase() === 'nonsense') {
-    return 'Nonsense';
-  }
-  return detectedLanguage;
-};
+import { LanguageManager } from '../utils/language-utils';
 
 // Helper functions for code analysis
 function analyzeCodeForOptimization(code: string) {
@@ -172,9 +162,9 @@ export class CodeOptimizationAgent implements Agent {
       const optimizedCode = generateOptimizedCode(code);
 
       const question = input.replace(/```[\s\S]*?```/g, '').trim();
-      const questionLanguage = await detectLanguage(question, context.llm);
-
-      if (questionLanguage === 'Nonsense') {
+      const languageContext = await LanguageManager.getLanguageContext(question, context.llm);
+      
+      if (languageContext.language === 'Nonsense') {
         return {
           output:
             "I'm sorry, I didn't understand your request. Could you please rephrase it?",
@@ -182,9 +172,9 @@ export class CodeOptimizationAgent implements Agent {
         };
       }
 
-      const synthesisPrompt = `You are an expert code optimization assistant. A user has provided code and is asking for optimizations. Your response must be entirely in ${questionLanguage}.
+      const synthesisPrompt = `You are an expert code optimization assistant. A user has provided code and is asking for optimizations.
 
-**Your response must be entirely in ${questionLanguage}.** This includes all headers and explanatory text.
+${languageContext.instructions}
 
 **User's Question:**
 ${question}
@@ -213,9 +203,10 @@ ${optimizedCode}
 - ${analysis.recommendations.join('\n- ')}
 
 **Response Structure:**
-1.  Start with a "Code Optimization Analysis" section (in ${questionLanguage}).
-2.  Include subsections for Original Code Issues, Performance Impact, Optimized Version, Optimization Techniques Used, Expected Performance Improvement, and Additional Recommendations (all in ${questionLanguage}).
-3.  Provide a comprehensive explanation of the analysis and the optimized code in a helpful, conversational tone.
+1.  Start with a "Code Optimization Analysis" section
+2.  Include subsections for Original Code Issues, Performance Impact, Optimized Version, Optimization Techniques Used, Expected Performance Improvement, and Additional Recommendations
+3.  Provide a comprehensive explanation of the analysis and the optimized code in a helpful, conversational tone
+4.  ALL sections must follow the language requirements stated above
 
 Please generate the complete response now.`;
 

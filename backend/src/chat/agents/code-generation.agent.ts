@@ -1,15 +1,5 @@
 import { Agent, AgentName } from '../types';
-
-const detectLanguage = async (text: string, llm: any): Promise<string> => {
-  const prompt = `Detect the language of this text. If the text is nonsensical or a mix of random characters, respond with "Nonsense". Otherwise, respond with only the language name (e.g., "Spanish", "English", "French"). If you cannot determine the language, default to "English".\n\nText: "${text}"`;
-  const result = await llm.invoke(prompt);
-  const detectedLanguage =
-    typeof result.content === 'string' ? result.content.trim() : 'English';
-  if (detectedLanguage.toLowerCase() === 'nonsense') {
-    return 'Nonsense';
-  }
-  return detectedLanguage;
-};
+import { detectLanguage, LanguageManager } from '../utils/language-utils';
 
 export class CodeGenerationAgent implements Agent {
   public name: AgentName = 'code_generation';
@@ -34,9 +24,12 @@ export class CodeGenerationAgent implements Agent {
         };
       }
 
-      const synthesisPrompt = `You are an expert code generation assistant. A user has provided a request for code. Your response must be entirely in ${questionLanguage}.
+      // Get language enforcement instructions
+      const languageContext = await LanguageManager.getLanguageContext(input, context.llm);
+      
+      const synthesisPrompt = `You are an expert code generation assistant. A user has provided a request for code.
 
-**Your response must be entirely in ${questionLanguage}.** This includes all headers and explanatory text.
+${languageContext.instructions}
 
 **User's Request:**
 ${input}
@@ -45,7 +38,7 @@ ${input}
 1.  Provide the generated code in a markdown block.
 2.  Provide a comprehensive explanation of the generated code in a helpful, conversational tone.
 
-Please generate the complete response now.`;
+Please generate the complete response now in ${languageContext.language}.`;
 
       const llmResult = await context.llm.invoke(synthesisPrompt);
       const output =

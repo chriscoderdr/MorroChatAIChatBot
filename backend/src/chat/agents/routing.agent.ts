@@ -91,7 +91,7 @@ IMPORTANT TOPIC RESTRICTION: This chat is strictly focused on "${chatDefaultTopi
 `
         : '';
 
-      const systemPrompt = `CRITICAL: You are a JSON-only routing API. You MUST return ONLY a JSON object. NO conversational text.
+            const systemPrompt = `IMPORTANT: Always reply and route in the same language as the user's query, regardless of which language it is. The LLM supports all languages.
 ${topicRule}
 AVAILABLE AGENTS:
 ${routableAgents

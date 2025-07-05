@@ -2,6 +2,7 @@
 import { Agent, AgentName } from '../types';
 import { Logger } from '@nestjs/common';
 import { ChatOpenAI } from '@langchain/openai';
+import { LanguageManager } from '../utils/language-utils';
 
 const logger = new Logger('ResearchAgent');
 
@@ -16,6 +17,7 @@ export class ResearchAgent implements Agent {
     let currentQuery: string | object = input;
     let iteration = 0;
     let initialExclusions: string[] = [];
+    let questionLanguage = 'English'; // Default language
 
     if (!callAgent) {
       throw new Error('callAgent is not available');
@@ -128,7 +130,10 @@ Respond with a JSON object with two keys: "research_topic" and "exclude_sites".
         })
         .join('\n\n---\n\n');
 
+      // Reuse same language detection from above
       const analysisPrompt = `You are a master research analyst. Your task is to analyze the provided research history and decide on the next action.
+
+${(await LanguageManager.getLanguageContext(input, llm)).instructions}
 
 **User's Original Question:**
 "${input}"
@@ -151,8 +156,7 @@ ${historyText}
         *   "exclude_sites" (optional): An array of domains to exclude from the next search if you identify low-quality or irrelevant sources (e.g., ["example.com", "another-site.org"]).
     *   If "nextAction" is "FINISH", the JSON should contain:
         *   "nextAction": "FINISH"
-        *   "nextQueryOrFinalAnswer": A complete, final, and engaging answer for the user. Use markdown to format the answer with emojis, blockquotes, and bold text to make it more visually appealing. If any direct, factual answers were found, highlight them. At the end, include a "## 📚 Sources" section with a markdown-formatted list of the most relevant URLs.
-6.  Provide all answers in the same language as the user's original question.
+        *   "nextQueryOrFinalAnswer": A complete, final, and engaging answer for the user in ${questionLanguage}. Use markdown to format the answer with emojis, blockquotes, and bold text to make it more visually appealing. If any direct, factual answers were found, highlight them. At the end, include a "## 📚 Sources" section with a markdown-formatted list of the most relevant URLs.
 
 **JSON Response (JSON only, no other text):**`;
 
@@ -198,16 +202,23 @@ ${historyText}
 
     logger.warn(
       'Research reached max iterations without a final answer. Synthesizing a summary of findings.',
-    );
-
-    const historyText = researchHistory
+    );      const historyText = researchHistory
       .map(
         (item, index) =>
           `Search #${index + 1} (Query: "${item.query}"):\n${item.results}`,
       )
-      .join('\n\n---\n\n');
+      .join('\n\n---\n\n');      // Detect language of user's question
+      try {
+        const languageContext = await LanguageManager.getLanguageContext(input, llm);
+        questionLanguage = languageContext.language;
+      } catch (e) {
+        // fallback to English (already set as default)
+        logger.warn('Language detection failed, falling back to English');
+      }
 
-    const finalSummaryPrompt = `You are a helpful research assistant. You were unable to find a definitive final answer after several search attempts. Your task is to synthesize the research history into a single, helpful, conversational response for the user.
+      const finalSummaryPrompt = `You are a helpful research assistant. You were unable to find a definitive final answer after several search attempts. Your task is to synthesize the research history into a single, helpful, conversational response for the user.
+
+${(await LanguageManager.getLanguageContext(input, llm)).instructions}
 
 **User's Original Question:**
 "${input}"
@@ -225,9 +236,8 @@ ${historyText}
 4.  Acknowledge that a complete answer could not be found, but present the information you did find in a helpful and visually appealing way.
 5.  At the end of your answer, include a "## 📚 Sources" section with a markdown-formatted list of the most relevant URLs discovered.
 6.  Do not include raw search results or JSON in your response.
-7.  Provide the answer in the same language as the user's original question.
 
-**Final Answer:**`;
+**Final Answer in ${questionLanguage}:**`;
 
     const finalSummaryResult = await llm.invoke(finalSummaryPrompt);
     const finalAnswer = finalSummaryResult.content.toString();

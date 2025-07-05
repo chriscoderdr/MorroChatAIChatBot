@@ -1,5 +1,7 @@
 import { Agent, AgentName } from '../types';
 
+import { LanguageManager } from '../utils/language-utils';
+
 // Helper interfaces for code analysis
 interface CodeAnalysis {
   languages: Set<string>;
@@ -23,12 +25,16 @@ const analyzeCode = async (
   };
 
   const detectionPromises = codeBlocks.map(async (code) => {
-    const langPrompt = `Detect the programming language of this code. Respond with only the language name (e.g., "python", "javascript").\n\n\`\`\`\n${code}\n\`\`\``;
+    // Use more precise language detection for code
+    const langPrompt = `You are a programming language detector. Analyze this code and respond with ONLY the name of the programming language in lowercase (e.g., "python", "javascript", "typescript", "java", etc). If unknown, respond with "unknown".
+
+\`\`\`
+${code}
+\`\`\``;
     const langResult = await llm.invoke(langPrompt);
-    const language =
-      typeof langResult.content === 'string'
-        ? langResult.content.trim().toLowerCase()
-        : 'unknown';
+    const language = typeof langResult.content === 'string' 
+      ? langResult.content.trim().toLowerCase().replace(/[^a-z\d+#]/g, '')  // Clean the response to just the language name
+      : 'unknown';
     analysis.languages.add(language);
     return { code, language };
   });
@@ -147,14 +153,12 @@ const buildSearchQuery = (
 };
 
 const detectLanguage = async (text: string, llm: any): Promise<string> => {
-  const prompt = `Detect the language of this text. If the text is nonsensical or a mix of random characters, respond with "Nonsense". Otherwise, respond with only the language name (e.g., "Spanish", "English", "French"). If you cannot determine the language, default to "English".\n\nText: "${text}"`;
-  const result = await llm.invoke(prompt);
-  const detectedLanguage =
-    typeof result.content === 'string' ? result.content.trim() : 'English';
-  if (detectedLanguage.toLowerCase() === 'nonsense') {
-    return 'Nonsense';
+  try {
+    const languageContext = await LanguageManager.getLanguageContext(text, llm);
+    return languageContext.language;
+  } catch (error) {
+    return 'English'; // fallback
   }
-  return detectedLanguage;
 };
 
 const synthesizeAnswer = async (
@@ -167,7 +171,7 @@ const synthesizeAnswer = async (
 ): Promise<string> => {
   const prompt = `You are an expert code assistant. A user has provided code, a question, and some analysis. Your task is to synthesize all this information into a single, helpful response in ${language}.
 
-**Your response must be entirely in ${language}.** This includes all headers and explanatory text.
+${(await LanguageManager.getLanguageContext(question, llm)).instructions}
 
 **User's Question:**
 ${question}

@@ -1,6 +1,7 @@
 // summarizer.agent.ts - LLM-powered summarization and text analysis agent
 import { Agent, AgentName } from '../types';
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { LanguageManager } from '../utils/language-utils';
 
 export class SummarizerAgent implements Agent {
   public name: AgentName = 'summarizer';
@@ -10,7 +11,20 @@ export class SummarizerAgent implements Agent {
   public async handle(input, context) {
     try {
       // Create a focused prompt for the summarization task
+      // Get the language of the input text using centralized utils
+      let textLanguage = 'English';
+      try {
+        if (context?.llm) {
+          const languageContext = await LanguageManager.getLanguageContext(input, context.llm);
+          textLanguage = languageContext.language;
+        }
+      } catch (e) {
+        // fallback to English
+      }
+      
       const summaryPrompt = `You are an expert text analyst and summarizer. Your task is to intelligently process and analyze the following text according to the specific requirements.
+
+${(await LanguageManager.getLanguageContext(input, context.llm)).instructions}
 
 TEXT TO ANALYZE:
 ${input}
@@ -18,12 +32,11 @@ ${input}
 INSTRUCTIONS:
 1.  If the text is a research analysis prompt (it will contain "USER'S QUESTION" and "SEARCH HISTORY"), follow the specific instructions within that prompt *exactly*. Your response should be either "ANSWER_FOUND: [answer]" or "NEED_MORE_SEARCH: [new query]".
 2.  For all other text, provide a clear and concise summary that captures the key information.
-3.  Detect the language of the provided text and respond *only* in that language. If the language is undetectable, default to English.
-4.  Focus on factual information and avoid speculation.
-5.  Do not include technical metadata or your own thinking process in the final output.
-6.  Format the final output using markdown for a beautiful and user-friendly experience. Use headings, bold text, lists, and tables where appropriate to present the information in a clear and organized way.
+3.  Focus on factual information and avoid speculation.
+4.  Do not include technical metadata or your own thinking process in the final output.
+5.  Format the final output using markdown for a beautiful and user-friendly experience. Use headings, bold text, lists, and tables where appropriate to present the information in a clear and organized way.
 
-Provide your analysis or summary:`;
+Provide your analysis or summary in ${textLanguage}:`;
 
       // Try to use LLM if available
       try {

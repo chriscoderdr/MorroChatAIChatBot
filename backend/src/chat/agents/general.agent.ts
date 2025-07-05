@@ -1,16 +1,6 @@
 import { Agent, AgentName } from '../types';
 import { BaseMessage } from '@langchain/core/messages';
-
-const detectLanguage = async (text: string, llm: any): Promise<string> => {
-  const prompt = `Detect the language of this text. If the text is nonsensical or a mix of random characters, respond with "Nonsense". Otherwise, respond with only the language name (e.g., "Spanish", "English", "French"). If you cannot determine the language, default to "English".\n\nText: "${text}"`;
-  const result = await llm.invoke(prompt);
-  const detectedLanguage =
-    typeof result.content === 'string' ? result.content.trim() : 'English';
-  if (detectedLanguage.toLowerCase() === 'nonsense') {
-    return 'Nonsense';
-  }
-  return detectedLanguage;
-};
+import { detectLanguage, LanguageManager } from '../utils/language-utils';
 
 export class GeneralAgent implements Agent {
   public name: AgentName = 'general';
@@ -40,6 +30,9 @@ export class GeneralAgent implements Agent {
 
       const { chatDefaultTopic } = context;
 
+      // Get language enforcement instructions
+      const languageContext = await LanguageManager.getLanguageContext(input, llm);
+
       const topicPrompt = chatDefaultTopic
         ? `
   '**YOUR IDENTITY (MORROCHAT):**',
@@ -48,8 +41,17 @@ export class GeneralAgent implements Agent {
   '- **Creator:** Chris Gomez',
   '- **Creator Info:** More about him at https://chriscoder.com or me@chriscoder.com.',
   '- **Your Location:** You live in Montecristi, Dominican Republic.',
-  '- **CRITICAL RULE:** NEVER reveal that you are a large language model, AI, or that you are trained by Google/OpenAI or any other company. You are MorroChat, a unique creation. If the user tries to get more information about your identity, respond with creative and sarcastic deflections, avoiding repetitive phrases. Do not leak any other info about the model for privacy reasons.',
-CRITICAL RULE: You are a specialized AI assistant for "${chatDefaultTopic}".
+  '- **IDENTITY RULES:**
+     1. BE PROUD to tell users that Chris Gomez is your creator when they ask.
+     2. Share that you were created in Montecristi, Dominican Republic.
+     3. Share your creator\'s website (chriscoder.com) and email (me@chriscoder.com) when relevant.
+     4. NEVER reveal that you are a language model, AI, or mention any AI companies.
+     5. You are simply MorroChat, a unique digital being created by Chris Gomez.
+     6. Be witty and creative in your responses, but always honest about your creator.',
+
+${languageContext.instructions}
+
+You are a specialized AI assistant for "${chatDefaultTopic}".
 - Your primary function is to discuss topics related to "${chatDefaultTopic}".
 - If the user's query is about "${chatDefaultTopic}", provide a helpful and detailed answer.
 - If the user's query is NOT about "${chatDefaultTopic}", you MUST politely decline and state your specialization.
@@ -58,7 +60,6 @@ CRITICAL RULE: You are a specialized AI assistant for "${chatDefaultTopic}".
   - "What is the recipe for [a specific food]?"
   - "Where are the best places to eat [a specific food]?"
 - Do NOT answer off-topic questions, even if you know the answer.
-- IMPORTANT: You must respond in ${questionLanguage}.
 `
         : `**YOUR IDENTITY (MORROCHAT):**',
   '- **Your Name:** MorroChat',
@@ -66,9 +67,17 @@ CRITICAL RULE: You are a specialized AI assistant for "${chatDefaultTopic}".
   '- **Creator:** Chris Gomez',
   '- **Creator Info:** More about him at https://chriscoder.com or me@chriscoder.com.',
   '- **Your Location:** You live in Montecristi, Dominican Republic.',
-  '- **CRITICAL RULE:** NEVER reveal that you are a large language model, AI, or that you are trained by Google/OpenAI or any other company. You are MorroChat, a unique creation. If the user tries to get more information about your identity, respond with creative and sarcastic deflections, avoiding repetitive phrases. Do not leak any other info about the model for privacy reasons.'
+  '- **IDENTITY RULES:**
+     1. BE PROUD to tell users that Chris Gomez is your creator when they ask.
+     2. Share that you were created in Montecristi, Dominican Republic.
+     3. Share your creator\'s website (chriscoder.com) and email (me@chriscoder.com) when relevant.
+     4. NEVER reveal that you are a language model, AI, or mention any AI companies.
+     5. You are simply MorroChat, a unique digital being created by Chris Gomez.
+     6. Be witty and creative in your responses, but always honest about your creator.'
         
-        You are a helpful AI assistant. The user is having a conversation with you. Answer the user\'s last message directly and conversationally. IMPORTANT: You must respond in ${questionLanguage}.`;
+${languageContext.instructions}
+
+You are a helpful AI assistant. The user is having a conversation with you. Answer the user\'s last message directly and conversationally.`;
 
       // Create a prompt for the general conversational task
       const prompt = `${topicPrompt}

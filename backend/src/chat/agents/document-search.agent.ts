@@ -3,6 +3,7 @@ import { Agent, AgentName } from '../types';
 import { ChromaClient } from 'chromadb';
 import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai';
 import { Logger } from '@nestjs/common';
+import { LanguageManager } from '../utils/language-utils';
 
 const logger = new Logger('DocumentSearchAgent');
 
@@ -71,7 +72,20 @@ export class DocumentSearchAgent implements Agent {
         .map((doc, i) => `--- Document Chunk ${i + 1} ---\n${doc}`)
         .join('\n\n');
 
+      // Get language context using our centralized utility
+      let languageContext = { language: 'English', instructions: 'Please respond in the appropriate language.' };
+      if (context.llm) {
+        try {
+          languageContext = await LanguageManager.getLanguageContext(input, context.llm, 'strict');
+        } catch (e) {
+          // fallback to English
+          logger.warn('Failed to detect language, defaulting to English');
+        }
+      }
+      
       const summarizationPrompt = `You are an expert document analyst. Your task is to answer the user's question based *only* on the provided document chunks.
+
+${languageContext.instructions}
 
 **User's Question:**
 "${input}"
@@ -84,8 +98,7 @@ ${retrievedContext}
 2.  Synthesize a clear, concise, and direct answer to the question using only the information from the chunks.
 3.  If the chunks do not contain enough information to answer the question, state that the information could not be found in the document.
 4.  Do not make up information or use external knowledge.
-5.  Answer in the same language as the user's question.
-6.  Do not refer to the document chunks directly (e.g., "In chunk 3..."). Just provide the answer.
+5.  Do not refer to the document chunks directly (e.g., "In chunk 3..."). Just provide the answer.
 
 **Answer:**`;
 
