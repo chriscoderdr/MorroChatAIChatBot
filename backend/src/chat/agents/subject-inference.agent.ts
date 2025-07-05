@@ -2,6 +2,7 @@ import { Agent, AgentName } from '../types';
 import { Logger } from '@nestjs/common';
 import { ChatOpenAI } from '@langchain/openai';
 import { BaseMessage } from '@langchain/core/messages';
+import { ResponseFormatter } from '../utils/response-utils';
 
 export class SubjectInferenceAgent implements Agent {
   public name: AgentName = 'subject_inference';
@@ -13,11 +14,15 @@ export class SubjectInferenceAgent implements Agent {
       const { chatHistory, llm } = context;
 
       if (!chatHistory || chatHistory.length === 0) {
-        return { output: '{}' }; // No history, no subject
+        return ResponseFormatter.formatAgentResponse('{}', 0.0); // No history, no subject
       }
       if (!llm) {
         logger.warn('LLM not available for subject inference.');
-        return { output: '{}' };
+        return ResponseFormatter.formatErrorResponse(
+          'Subject inference service is not available.',
+          context,
+          'subject_inference'
+        );
       }
 
       const recentMessages = chatHistory
@@ -87,13 +92,17 @@ ${recentMessages}
       }
 
       logger.log(`Inferred subject JSON: ${jsonOutput}`);
-      return { output: jsonOutput, confidence: 0.95 };
+      return ResponseFormatter.formatAgentResponse(jsonOutput, 0.95);
     } catch (error: any) {
       logger.error(
         `Error in subject inference agent: ${error.message}`,
         error.stack,
       );
-      return { output: '{}' }; // Return empty JSON on error
+      return ResponseFormatter.formatErrorResponse(
+        'Failed to infer subject from conversation.',
+        context,
+        'subject_inference'
+      );
     }
   }
 }

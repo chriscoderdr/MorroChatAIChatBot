@@ -2,6 +2,7 @@
 import { Agent, AgentName } from '../types';
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { LanguageManager } from '../utils/language-utils';
+import { ResponseFormatter } from '../utils/response-utils';
 
 export class SummarizerAgent implements Agent {
   public name: AgentName = 'summarizer';
@@ -122,28 +123,26 @@ Provide your analysis or summary in ${textLanguage}:`;
             .replace(/The information shows,?\s*/gi, '')
             .trim();
 
-          return {
-            output: result,
-            confidence: 0.9,
-          };
+          return ResponseFormatter.formatAgentResponse(result, 0.9);
         }
       } catch (llmError) {
         console.error('Error using LLM for summarization:', llmError);
         // Continue to fallback pattern matching
       }
 
-      // If LLM methods fail, return a generic error instead of using a brittle fallback.
-      return {
-        output:
-          'I am having trouble analyzing this text right now. Please try again later.',
-        confidence: 0.1,
-      };
+      // If LLM methods fail, return a generic error
+      return ResponseFormatter.formatErrorResponse(
+        'I am having trouble analyzing this text right now. Please try again later.',
+        context,
+        'summarizer'
+      );
     } catch (error: any) {
       console.error('Summarizer agent error:', error);
-      return {
-        output: `Analysis failed: ${error.message}`,
-        confidence: 0.1,
-      };
+      return ResponseFormatter.formatErrorResponse(
+        `Analysis failed: ${error.message}`,
+        context,
+        'summarizer'
+      );
     }
   }
 }

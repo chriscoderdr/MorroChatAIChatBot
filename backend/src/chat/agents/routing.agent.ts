@@ -68,10 +68,18 @@ export class RoutingAgent implements Agent {
       const { availableAgents, llm } = context;
 
       if (!availableAgents || !Array.isArray(availableAgents)) {
-        throw new Error('Invalid routing context: missing availableAgents');
+        return ResponseFormatter.formatErrorResponse(
+          'Unable to route your request: routing service is not properly configured.',
+          context,
+          'routing'
+        );
       }
       if (!llm || typeof llm.invoke !== 'function') {
-        throw new Error('Invalid routing context: missing llm instance');
+        return ResponseFormatter.formatErrorResponse(
+          'Unable to route your request: language model is not available.',
+          context,
+          'routing'
+        );
       }
 
       const hasDocuments = hasDocumentContext(context);

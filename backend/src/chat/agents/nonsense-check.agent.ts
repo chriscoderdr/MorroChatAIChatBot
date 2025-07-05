@@ -1,5 +1,6 @@
 import { Agent, AgentName, AgentResult } from '../types';
 import { LanguageManager } from '../utils/language-utils';
+import { ResponseFormatter } from '../utils/response-utils';
 
 export class NonsenseCheckAgent implements Agent {
   public name: AgentName = 'nonsense_check';
@@ -45,11 +46,11 @@ Only mark as nonsense if there is absolutely no discernible meaning.`;
         cleanedResult,
       );
       // Fallback or default behavior if JSON is invalid
-      return {
-        output:
-          "I'm having a little trouble understanding. Could you please rephrase that?",
-        confidence: 0.5, // Unsure
-      };
+      return ResponseFormatter.formatErrorResponse(
+        "I'm having a little trouble understanding. Could you please rephrase that?",
+        context,
+        'nonsense_check'
+      );
     }
 
     if (response.isNonsense) {
@@ -99,15 +100,15 @@ Now, generate a new, creative response to the user's message: "${input}" in ${de
 
       const creativeResult = await context.llm.invoke(creativeResponsePrompt);
 
-      return {
-        output: creativeResult.content as string,
-        confidence: 1.0,
-      };
+      return ResponseFormatter.formatAgentResponse(
+        creativeResult.content as string,
+        1.0
+      );
     }
 
-    return {
-      output: 'No nonsense detected.',
-      confidence: 0.0, // Confident it's not nonsense, so other agents should run.
-    };
+    return ResponseFormatter.formatAgentResponse(
+      'No nonsense detected.',
+      0.0 // Confident it's not nonsense, so other agents should run.
+    );
   }
 }

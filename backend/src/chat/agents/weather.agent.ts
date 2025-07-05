@@ -1,5 +1,6 @@
 import { Agent, AgentName } from '../types';
 import { Logger } from '@nestjs/common';
+import { ResponseFormatter } from '../utils/response-utils';
 
 // Create a dedicated weather agent that uses the open_weather_map tool correctly
 export class WeatherAgent implements Agent {
@@ -17,11 +18,11 @@ export class WeatherAgent implements Agent {
         logger.warn(
           'LLM not available for location extraction in WeatherAgent.',
         );
-        return {
-          output:
-            "I'm sorry, I can't process this request without my core AI module.",
-          confidence: 0.1,
-        };
+        return ResponseFormatter.formatErrorResponse(
+          "I'm sorry, I can't process this request without my core AI module.",
+          context,
+          'weather'
+        );
       }
 
       // Step 1: Use subject_inference to get context from the conversation
@@ -70,11 +71,11 @@ Location(s):
       logger.log(`Extracted locations with LLM: "${locationsString}"`);
 
       if (!locationsString) {
-        return {
-          output:
-            "I couldn't identify a location in your request. Please specify a city, like 'weather in London'.",
-          confidence: 0.4,
-        };
+        return ResponseFormatter.formatErrorResponse(
+          "I couldn't identify a location in your request. Please specify a city, like 'weather in London'.",
+          context,
+          'weather'
+        );
       }
 
       const locations = locationsString.split(' | ').map((loc) => loc.trim());
@@ -119,10 +120,10 @@ COMPARISON:`;
           context,
         );
 
-        return {
-          output: finalResult.output,
-          confidence: 0.9,
-        };
+        return ResponseFormatter.formatAgentResponse(
+          finalResult.output,
+          0.9
+        );
       } else {
         if (!callAgent) {
           throw new Error('callAgent is not available');
@@ -155,10 +156,10 @@ RESPONSE:`;
           context,
         );
 
-        return {
-          output: finalResult.output,
-          confidence: result.confidence || 0.85,
-        };
+        return ResponseFormatter.formatAgentResponse(
+          finalResult.output,
+          result.confidence || 0.85
+        );
       }
     } catch (error: any) {
       logger.error(`Error in weather agent: ${error.message}`, error.stack);
@@ -177,16 +178,17 @@ INSTRUCTIONS:
 
 RESPONSE:`;
         const finalResult = await callAgent('summarizer', errorPrompt, context);
-        return {
-          output: finalResult.output,
-          confidence: 0.2,
-        };
+        return ResponseFormatter.formatAgentResponse(
+          finalResult.output,
+          0.2
+        );
       }
       // Fallback if callAgent is not available
-      return {
-        output: `I'm sorry, I couldn't get the weather information. Please try again with a specific location.`,
-        confidence: 0.2,
-      };
+      return ResponseFormatter.formatErrorResponse(
+        `I'm sorry, I couldn't get the weather information. Please try again with a specific location.`,
+        context,
+        'weather'
+      );
     }
   }
 }

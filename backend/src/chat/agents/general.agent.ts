@@ -1,6 +1,7 @@
 import { Agent, AgentName } from '../types';
 import { BaseMessage } from '@langchain/core/messages';
 import { detectLanguage, LanguageManager } from '../utils/language-utils';
+import { ResponseFormatter } from '../utils/response-utils';
 
 export class GeneralAgent implements Agent {
   public name: AgentName = 'general';
@@ -11,21 +12,21 @@ export class GeneralAgent implements Agent {
       const { llm, chatHistory } = context;
 
       if (!llm) {
-        return {
-          output:
-            "I'm sorry, I can't process this request without my core AI module.",
-          confidence: 0.1,
-        };
+        return ResponseFormatter.formatErrorResponse(
+          "I'm sorry, I can't process this request without my core AI module.",
+          context,
+          'general'
+        );
       }
 
       const questionLanguage = await detectLanguage(input, llm);
 
       if (questionLanguage === 'Nonsense') {
-        return {
-          output:
-            "I'm sorry, I didn't understand your request. Could you please rephrase it?",
-          confidence: 0.3,
-        };
+        return ResponseFormatter.formatErrorResponse(
+          "I'm sorry, I didn't understand your request. Could you please rephrase it?",
+          context,
+          'general'
+        );
       }
 
       const { chatDefaultTopic } = context;
@@ -96,15 +97,13 @@ AI:`;
           ? result.content
           : JSON.stringify(result.content);
 
-      return {
-        output,
-        confidence: 0.75, // General confidence for conversational topics
-      };
+      return ResponseFormatter.formatAgentResponse(output, 0.75); // General confidence for conversational topics
     } catch (error: any) {
-      return {
-        output: `I'm sorry, I encountered an error: ${error.message}`,
-        confidence: 0.1,
-      };
+      return ResponseFormatter.formatErrorResponse(
+        `I'm sorry, I encountered an error: ${error.message}`,
+        context,
+        'general'
+      );
     }
   }
 }

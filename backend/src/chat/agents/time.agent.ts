@@ -1,5 +1,6 @@
 import { Agent, AgentName } from '../types';
 import { Logger } from '@nestjs/common';
+import { ResponseFormatter } from '../utils/response-utils';
 
 // Create a dedicated time agent that uses the current_time tool correctly
 export class TimeAgent implements Agent {
@@ -17,11 +18,11 @@ export class TimeAgent implements Agent {
         logger.warn(
           'LLM not available for timezone extraction in TimeAgent.',
         );
-        return {
-          output:
-            "I'm sorry, I can't process this request without my core AI module.",
-          confidence: 0.1,
-        };
+        return ResponseFormatter.formatErrorResponse(
+          "I'm sorry, I can't process this request without my core AI module.",
+          context,
+          'time'
+        );
       }
 
       // Step 1: Use subject_inference to get context from the conversation
@@ -70,11 +71,11 @@ Location(s):
       logger.log(`Extracted locations with LLM: "${locationsString}"`);
 
       if (!locationsString) {
-        return {
-          output:
-            "I couldn't identify a location in your request. Please specify a city, like 'time in London'.",
-          confidence: 0.4,
-        };
+        return ResponseFormatter.formatErrorResponse(
+          "I couldn't identify a location in your request. Please specify a city, like 'time in London'.",
+          context,
+          'time'
+        );
       }
 
       const locations = locationsString.split(' | ').map((loc) => loc.trim());
@@ -141,10 +142,10 @@ COMPARISON:`;
           context,
         );
 
-        return {
-          output: finalResult.output,
-          confidence: 0.9,
-        };
+        return ResponseFormatter.formatAgentResponse(
+          finalResult.output,
+          0.9
+        );
       } else {
         if (!callAgent) {
           throw new Error('callAgent is not available');
@@ -168,11 +169,11 @@ Timezone:
             : JSON.stringify(timezoneResult.content).trim();
 
         if (!timezoneString) {
-          return {
-            output:
-              `I couldn't determine the timezone for "${locations[0]}". Please try a different location.`,
-            confidence: 0.4,
-          };
+          return ResponseFormatter.formatErrorResponse(
+            `I couldn't determine the timezone for "${locations[0]}". Please try a different location.`,
+            context,
+            'time'
+          );
         }
 
         const result = await callAgent(
@@ -202,10 +203,10 @@ RESPONSE:`;
           context,
         );
 
-        return {
-          output: finalResult.output,
-          confidence: result.confidence || 0.85,
-        };
+        return ResponseFormatter.formatAgentResponse(
+          finalResult.output,
+          result.confidence || 0.85
+        );
       }
     } catch (error: any) {
       logger.error(`Error in time agent: ${error.message}`, error.stack);
@@ -224,16 +225,17 @@ INSTRUCTIONS:
 
 RESPONSE:`;
         const finalResult = await callAgent('summarizer', errorPrompt, context);
-        return {
-          output: finalResult.output,
-          confidence: 0.2,
-        };
+        return ResponseFormatter.formatAgentResponse(
+          finalResult.output,
+          0.2
+        );
       }
       // Fallback if callAgent is not available
-      return {
-        output: `I'm sorry, I couldn't get the time information. Please try again with a valid IANA timezone.`,
-        confidence: 0.2,
-      };
+      return ResponseFormatter.formatErrorResponse(
+        `I'm sorry, I couldn't get the time information. Please try again with a valid IANA timezone.`,
+        context,
+        'time'
+      );
     }
   }
 }

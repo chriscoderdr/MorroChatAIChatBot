@@ -1,5 +1,6 @@
 import { Agent, AgentName, AgentResult } from '../types';
 import { LanguageManager } from '../utils/language-utils';
+import { ResponseFormatter } from '../utils/response-utils';
 
 export class ProfanityCheckAgent implements Agent {
   public name: AgentName = 'profanity_check';
@@ -36,11 +37,11 @@ Text: "${input}"`;
         cleanedResult,
       );
       // Fallback or default behavior if JSON is invalid
-      return {
-        output:
-          "I'm having a little trouble understanding the vibe. Let's keep it friendly, okay?",
-        confidence: 0.5, // Unsure
-      };
+      return ResponseFormatter.formatErrorResponse(
+        "I'm having a little trouble understanding the vibe. Let's keep it friendly, okay?",
+        context,
+        'profanity_check'
+      );
     }
 
 
@@ -109,15 +110,15 @@ Now, generate a new, creative, and maximally sarcastic response to the user's me
         temperature: 0.7,
       });
 
-      return {
-        output: creativeResult.content as string,
-        confidence: 1.0,
-      };
+      return ResponseFormatter.formatAgentResponse(
+        creativeResult.content as string,
+        1.0
+      );
     }
 
-    return {
-      output: 'No profanity detected.',
-      confidence: 0.0, // Confident it's not profane, so other agents should run.
-    };
+    return ResponseFormatter.formatAgentResponse(
+      'No profanity detected.',
+      0.0 // Confident it's not profane, so other agents should run.
+    );
   }
 }

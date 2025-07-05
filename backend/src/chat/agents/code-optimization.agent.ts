@@ -1,6 +1,7 @@
 // code-optimization.agent.ts
 import { Agent, AgentName } from '../types';
 import { LanguageManager } from '../utils/language-utils';
+import { ResponseFormatter } from '../utils/response-utils';
 
 // Helper functions for code analysis
 function analyzeCodeForOptimization(code: string) {
@@ -140,18 +141,19 @@ export class CodeOptimizationAgent implements Agent {
       }
 
       if (codeBlocks.length === 0) {
-        return {
-          output:
-            'No code blocks found in your input or recent history. Please provide code using triple backticks (```) format for optimization analysis.',
-          confidence: 0.2,
-        };
+        return ResponseFormatter.formatErrorResponse(
+          'No code blocks found in your input or recent history. Please provide code using triple backticks (```) format for optimization analysis.',
+          context,
+          'code_optimization'
+        );
       }
 
       if (!context.llm) {
-        return {
-          output: "I'm sorry, I can't process this request without my core AI module.",
-          confidence: 0.1,
-        };
+        return ResponseFormatter.formatErrorResponse(
+          "I'm sorry, I can't process this request without my core AI module.",
+          context,
+          'code_optimization'
+        );
       }
 
       // Analyze the code for optimization opportunities
@@ -165,11 +167,11 @@ export class CodeOptimizationAgent implements Agent {
       const languageContext = await LanguageManager.getLanguageContext(question, context.llm);
       
       if (languageContext.language === 'Nonsense') {
-        return {
-          output:
-            "I'm sorry, I didn't understand your request. Could you please rephrase it?",
-          confidence: 0.3,
-        };
+        return ResponseFormatter.formatErrorResponse(
+          "I'm sorry, I didn't understand your request. Could you please rephrase it?",
+          context,
+          'code_optimization'
+        );
       }
 
       const synthesisPrompt = `You are an expert code optimization assistant. A user has provided code and is asking for optimizations.
@@ -214,15 +216,13 @@ Please generate the complete response now.`;
       const output =
         typeof llmResult.content === 'string' ? llmResult.content : '';
 
-      return {
-        output: output,
-        confidence: 0.9,
-      };
+      return ResponseFormatter.formatAgentResponse(output, 0.9);
     } catch (error: any) {
-      return {
-        output: `Code optimization analysis failed: ${error.message}`,
-        confidence: 0.1,
-      };
+      return ResponseFormatter.formatErrorResponse(
+        `Code optimization analysis failed: ${error.message}`,
+        context,
+        'code_optimization'
+      );
     }
   }
 }

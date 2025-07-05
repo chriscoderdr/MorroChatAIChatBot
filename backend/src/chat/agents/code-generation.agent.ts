@@ -1,5 +1,6 @@
 import { Agent, AgentName } from '../types';
 import { detectLanguage, LanguageManager } from '../utils/language-utils';
+import { ResponseFormatter } from '../utils/response-utils';
 
 export class CodeGenerationAgent implements Agent {
   public name: AgentName = 'code_generation';
@@ -8,20 +9,21 @@ export class CodeGenerationAgent implements Agent {
   public async handle(input, context) {
     try {
       if (!context.llm) {
-        return {
-          output: "I'm sorry, I can't process this request without my core AI module.",
-          confidence: 0.1,
-        };
+        return ResponseFormatter.formatErrorResponse(
+          "I'm sorry, I can't process this request without my core AI module.",
+          context,
+          'code_generation'
+        );
       }
 
       const questionLanguage = await detectLanguage(input, context.llm);
 
       if (questionLanguage === 'Nonsense') {
-        return {
-          output:
-            "I'm sorry, I didn't understand your request. Could you please rephrase it?",
-          confidence: 0.3,
-        };
+        return ResponseFormatter.formatErrorResponse(
+          "I'm sorry, I didn't understand your request. Could you please rephrase it?",
+          context,
+          'code_generation'
+        );
       }
 
       // Get language enforcement instructions
@@ -44,15 +46,13 @@ Please generate the complete response now in ${languageContext.language}.`;
       const output =
         typeof llmResult.content === 'string' ? llmResult.content : '';
 
-      return {
-        output: output,
-        confidence: 0.9,
-      };
+      return ResponseFormatter.formatAgentResponse(output, 0.9);
     } catch (error: any) {
-      return {
-        output: `Code generation failed: ${error.message}`,
-        confidence: 0.1,
-      };
+      return ResponseFormatter.formatErrorResponse(
+        `Code generation failed: ${error.message}`,
+        context,
+        'code_generation'
+      );
     }
   }
 }

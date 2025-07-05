@@ -4,6 +4,7 @@ import { ChromaClient } from 'chromadb';
 import { GoogleGenerativeAIEmbeddings } from '@langchain/google-genai';
 import { Logger } from '@nestjs/common';
 import { LanguageManager } from '../utils/language-utils';
+import { ResponseFormatter } from '../utils/response-utils';
 
 const logger = new Logger('DocumentSearchAgent');
 
@@ -15,16 +16,18 @@ export class DocumentSearchAgent implements Agent {
     const { userId, geminiApiKey } = context;
 
     if (!userId) {
-      return {
-        output: 'Cannot search documents without a user session.',
-        confidence: 0.1,
-      };
+      return ResponseFormatter.formatErrorResponse(
+        'Cannot search documents without a user session.',
+        context,
+        'document_search'
+      );
     }
     if (!geminiApiKey) {
-      return {
-        output: 'Cannot search documents without a valid API key.',
-        confidence: 0.1,
-      };
+      return ResponseFormatter.formatErrorResponse(
+        'Cannot search documents without a valid API key.',
+        context,
+        'document_search'
+      );
     }
 
     try {
@@ -40,11 +43,11 @@ export class DocumentSearchAgent implements Agent {
         logger.warn(
           `ChromaDB collection '${collectionName}' not found or Chroma not available.`,
         );
-        return {
-          output:
-            'No documents found to search. Please upload a document first.',
-          confidence: 0.4,
-        };
+        return ResponseFormatter.formatErrorResponse(
+          'No documents found to search. Please upload a document first.',
+          context,
+          'document_search'
+        );
       }
 
       const embedder = new GoogleGenerativeAIEmbeddings({
@@ -60,11 +63,10 @@ export class DocumentSearchAgent implements Agent {
 
       const documents = results.documents?.[0] || [];
       if (documents.length === 0) {
-        return {
-          output:
-            'No relevant information found in your uploaded documents for this query.',
-          confidence: 0.5,
-        };
+        return ResponseFormatter.formatAgentResponse(
+          'No relevant information found in your uploaded documents for this query.',
+          0.5
+        );
       }
 
       // Step 2: Use an LLM to synthesize an answer from the retrieved chunks
@@ -112,16 +114,17 @@ ${retrievedContext}
         context,
       );
 
-      return {
-        output: summaryResult.output,
-        confidence: Math.min(0.95, (summaryResult.confidence || 0.8) + 0.1), // Boost confidence slightly
-      };
+      return ResponseFormatter.formatAgentResponse(
+        summaryResult.output,
+        Math.min(0.95, (summaryResult.confidence || 0.8) + 0.1) // Boost confidence slightly
+      );
     } catch (error: any) {
       logger.error(`Error in document_search agent for user ${userId}:`, error);
-      return {
-        output: `An error occurred while searching the document: ${error.message}`,
-        confidence: 0.2,
-      };
+      return ResponseFormatter.formatErrorResponse(
+        `An error occurred while searching the document: ${error.message}`,
+        context,
+        'document_search'
+      );
     }
   }
 }
