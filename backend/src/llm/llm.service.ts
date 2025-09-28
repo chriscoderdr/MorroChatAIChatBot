@@ -12,7 +12,7 @@ export class LlmService {
     if (provider === 'gemini') {
       this.llm = new ChatGoogleGenerativeAI({
         apiKey: this.configService.get<string>('GEMINI_API_KEY') || '',
-        model: this.configService.get<string>('ai.model') || 'gemini-1.5-flash',
+        model: this.configService.get<string>('ai.model') || 'gemini-2.0-flash',
         temperature: this.configService.get<number>('ai.temperature') || 0,
         maxOutputTokens: this.configService.get<number>('ai.maxOutputTokens') || 1024,
       });

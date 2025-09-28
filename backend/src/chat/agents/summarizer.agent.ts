@@ -58,7 +58,7 @@ Provide your analysis or summary in ${textLanguage}:`;
             model:
               context?.geminiModel ||
               process.env.GEMINI_MODEL ||
-              'gemini-1.5-flash',
+              'gemini-2.0-flash',
             temperature: 0.3,
           });
 
